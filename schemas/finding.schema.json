@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://revix.dev/schemas/finding.schema.json",
+  "title": "Revix structured reviewer finding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "finding_id",
+    "reviewer_id",
+    "severity",
+    "claim",
+    "evidence",
+    "impact",
+    "suggested_fix",
+    "verification_test",
+    "confidence",
+    "related_quality_rules",
+    "tags"
+  ],
+  "properties": {
+    "finding_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "severity": {
+      "$ref": "#/$defs/severity"
+    },
+    "claim": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "$ref": "#/$defs/evidence"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    },
+    "impact": {
+      "type": "string",
+      "minLength": 1
+    },
+    "suggested_fix": {
+      "type": "string",
+      "minLength": 1
+    },
+    "verification_test": {
+      "type": "string",
+      "minLength": 1
+    },
+    "confidence": {
+      "$ref": "#/$defs/confidence"
+    },
+    "related_quality_rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "enum": ["BLOCKER", "MAJOR", "MINOR", "QUESTION", "NIT"]
+    },
+    "confidence": {
+      "enum": ["HIGH", "MEDIUM", "LOW"]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file_path", "line_start", "line_end", "snippet"],
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "line_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "snippet": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "finding_id": "finding-readability-minor",
+    "reviewer_id": "readability",
+    "severity": "MINOR",
+    "claim": "The new branch combines parsing and rendering decisions in one block, making future review harder.",
+    "evidence": {
+      "file_path": "src/auth/session.js",
+      "line_start": 2,
+      "line_end": 2,
+      "snippet": "logger.info({ token: session.token });"
+    },
+    "impact": "Future maintainers may miss behavior changes because unrelated decisions are coupled in the same branch.",
+    "suggested_fix": "Split the parsing decision from the rendering/logging decision into separate named helpers.",
+    "verification_test": "Add a focused unit test for the helper that decides whether session metadata should be logged.",
+    "confidence": "MEDIUM",
+    "related_quality_rules": ["readability.easy_to_understand"],
+    "tags": ["readability"]
+  }
+]

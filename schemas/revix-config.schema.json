@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://revix.dev/schemas/revix-config.schema.json",
+  "title": "Revix project configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "reviewers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "$ref": "#/$defs/reviewerIds" },
+        "disabled": { "$ref": "#/$defs/reviewerIds" }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "paths": { "$ref": "#/$defs/strings" }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extends": { "$ref": "#/$defs/strings" },
+        "overrides": { "type": "object" }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "contracts": { "$ref": "#/$defs/strings" },
+        "ignored": { "$ref": "#/$defs/strings" },
+        "security_sensitive": { "$ref": "#/$defs/strings" },
+        "performance_sensitive": { "$ref": "#/$defs/strings" }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    "severity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "overrides": { "type": "object" }
+      }
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "skip": { "$ref": "#/$defs/strings" },
+        "force_reviewers": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/reviewerIds" }
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": { "enum": ["markdown", "json"] }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fail_on_request_changes": { "type": "boolean" }
+      }
+    },
+    "constitution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ruleOverride"
+          }
+        },
+        "additionalRules": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/rule"
+          }
+        }
+      }
+    },
+    "reviewer_skills": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          }
+        },
+        "disabled": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "strings": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "reviewerIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      }
+    },
+    "constraintKind": {
+      "enum": ["hard", "soft"]
+    },
+    "severity": {
+      "enum": ["BLOCKER", "MAJOR", "MINOR", "QUESTION", "NIT"]
+    },
+    "verdict": {
+      "enum": ["APPROVE", "COMMENT", "REQUEST_CHANGES", "BLOCK"]
+    },
+    "severityBehavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaultSeverity": {
+          "$ref": "#/$defs/severity"
+        },
+        "maxSeverity": {
+          "$ref": "#/$defs/severity"
+        },
+        "onViolation": {
+          "$ref": "#/$defs/verdict"
+        },
+        "blocksMerge": {
+          "type": "boolean"
+        }
+      }
+    },
+    "fullSeverityBehavior": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/severityBehavior"
+        },
+        {
+          "required": ["defaultSeverity", "maxSeverity", "onViolation", "blocksMerge"]
+        }
+      ]
+    },
+    "ruleOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "severityBehavior": {
+          "$ref": "#/$defs/severityBehavior"
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "category", "description", "tags", "severityBehavior", "enabled"],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/constraintKind"
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "severityBehavior": {
+          "$ref": "#/$defs/fullSeverityBehavior"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

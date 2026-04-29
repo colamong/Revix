@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://revix.dev/schemas/pr-input.schema.json",
+  "title": "Revix PR input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["metadata", "changed_files"],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo", "number", "title", "body", "author", "labels", "base_ref", "head_ref"],
+      "properties": {
+        "repo": { "type": "string", "minLength": 1 },
+        "number": { "type": "integer", "minimum": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "body": { "type": "string" },
+        "author": { "type": "string", "minLength": 1 },
+        "labels": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "base_ref": { "type": "string", "minLength": 1 },
+        "head_ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "status", "additions", "deletions"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "status": { "enum": ["added", "modified", "deleted", "renamed", "copied", "unchanged"] },
+          "additions": { "type": "integer", "minimum": 0 },
+          "deletions": { "type": "integer", "minimum": 0 },
+          "patch": { "type": "string" },
+          "previous_path": { "type": "string" },
+          "binary": { "type": "boolean" }
+        }
+      }
+    },
+    "raw_diff": { "type": "string" }
+  }
+}

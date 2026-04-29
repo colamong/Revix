@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://revix.dev/schemas/reviewer-skill.schema.json",
+  "title": "Revix reviewer skill",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "skill_version",
+    "reviewer_id",
+    "display_name",
+    "responsibility",
+    "background",
+    "bias",
+    "flexibility_score",
+    "allowed_scope",
+    "forbidden_scope",
+    "severity_policy",
+    "quality_rules_focus",
+    "prompt_instructions",
+    "examples"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "skill_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "reviewer_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "display_name": { "type": "string", "minLength": 1 },
+    "responsibility": { "type": "string", "minLength": 1 },
+    "background": { "type": "string", "minLength": 1 },
+    "bias": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "flexibility_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "allowed_scope": { "$ref": "#/$defs/allowedScope" },
+    "forbidden_scope": { "$ref": "#/$defs/forbiddenScope" },
+    "severity_policy": { "$ref": "#/$defs/severityPolicy" },
+    "quality_rules_focus": { "$ref": "#/$defs/ruleIds" },
+    "prompt_instructions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "examples": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/example" }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "enum": ["BLOCKER", "MAJOR", "MINOR", "QUESTION", "NIT"]
+    },
+    "ruleIds": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      }
+    },
+    "allowedScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tags", "quality_rules", "file_patterns"],
+      "properties": {
+        "tags": { "$ref": "#/$defs/tags" },
+        "quality_rules": { "$ref": "#/$defs/ruleIds" },
+        "file_patterns": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "forbiddenScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tags", "note"],
+      "properties": {
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          }
+        },
+        "note": { "type": "string", "minLength": 1 }
+      }
+    },
+    "severityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_severity_by_tag", "blocker_requires", "style_only_max_severity"],
+      "properties": {
+        "max_severity_by_tag": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/severity" }
+        },
+        "blocker_requires": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "string", "minLength": 1 }
+            ]
+          }
+        },
+        "style_only_max_severity": { "$ref": "#/$defs/severity" }
+      }
+    },
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "finding"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "finding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["severity", "claim", "related_quality_rules", "tags"],
+          "properties": {
+            "severity": { "$ref": "#/$defs/severity" },
+            "claim": { "type": "string", "minLength": 1 },
+            "related_quality_rules": { "$ref": "#/$defs/ruleIds" },
+            "tags": { "$ref": "#/$defs/tags" }
+          }
+        }
+      }
+    }
+  }
+}

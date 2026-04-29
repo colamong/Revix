@@ -1,0 +1,20 @@
+[
+  {
+    "finding_id": "finding-security-blocker",
+    "reviewer_id": "security",
+    "severity": "BLOCKER",
+    "claim": "The new token logging path can expose credentials in application logs.",
+    "evidence": {
+      "file_path": "src/auth/session.js",
+      "line_start": 2,
+      "line_end": 2,
+      "snippet": "logger.info({ token: session.token });"
+    },
+    "impact": "A user session token could be captured by log aggregation and reused by compromised log readers.",
+    "suggested_fix": "Remove the token field from the log payload or replace it with a non-sensitive token identifier.",
+    "verification_test": "Add a test that creates a session and asserts the emitted log payload does not contain the raw token.",
+    "confidence": "HIGH",
+    "related_quality_rules": ["security.no_new_risk"],
+    "tags": ["security"]
+  }
+]

@@ -1,0 +1,123 @@
+version: 1
+rules:
+  - id: security.no_new_risk
+    kind: hard
+    category: security
+    tags: [security, regression]
+    description: New code must not introduce new exploitable security risk.
+    severityBehavior:
+      defaultSeverity: BLOCKER
+      maxSeverity: BLOCKER
+      onViolation: BLOCK
+      blocksMerge: true
+    enabled: true
+  - id: contract.no_breaking_change_without_versioning
+    kind: hard
+    category: contract
+    tags: [api, compatibility, versioning]
+    description: Breaking contract changes require explicit versioning or migration handling.
+    severityBehavior:
+      defaultSeverity: BLOCKER
+      maxSeverity: BLOCKER
+      onViolation: REQUEST_CHANGES
+      blocksMerge: true
+    enabled: true
+  - id: reliability.fail_safely
+    kind: hard
+    category: reliability
+    tags: [reliability, failure-mode]
+    description: New behavior must fail safely under expected error conditions.
+    severityBehavior:
+      defaultSeverity: MAJOR
+      maxSeverity: BLOCKER
+      onViolation: REQUEST_CHANGES
+      blocksMerge: true
+    enabled: true
+  - id: privacy.no_sensitive_data_exposure
+    kind: hard
+    category: privacy
+    tags: [privacy, data-exposure]
+    description: Changes must not expose credentials, personal data, or sensitive business data.
+    severityBehavior:
+      defaultSeverity: BLOCKER
+      maxSeverity: BLOCKER
+      onViolation: BLOCK
+      blocksMerge: true
+    enabled: true
+  - id: query.no_unsafe_query_access
+    kind: hard
+    category: query
+    tags: [query, authorization, data-access]
+    description: Query paths must preserve authorization, scoping, and safe access constraints.
+    severityBehavior:
+      defaultSeverity: BLOCKER
+      maxSeverity: BLOCKER
+      onViolation: BLOCK
+      blocksMerge: true
+    enabled: true
+  - id: maintainability.clear_boundaries
+    kind: soft
+    category: maintainability
+    tags: [architecture, maintainability]
+    description: Changes should preserve clear module and responsibility boundaries.
+    severityBehavior:
+      defaultSeverity: MAJOR
+      maxSeverity: MAJOR
+      onViolation: COMMENT
+      blocksMerge: false
+    enabled: true
+  - id: readability.easy_to_understand
+    kind: soft
+    category: readability
+    tags: [readability]
+    description: Code should be easy for future maintainers to understand.
+    severityBehavior:
+      defaultSeverity: MINOR
+      maxSeverity: MAJOR
+      onViolation: COMMENT
+      blocksMerge: false
+    enabled: true
+  - id: performance.reasonable_cost
+    kind: soft
+    category: performance
+    tags: [performance, cost]
+    description: Changes should avoid unreasonable compute, latency, memory, or network cost.
+    severityBehavior:
+      defaultSeverity: MINOR
+      maxSeverity: MAJOR
+      onViolation: COMMENT
+      blocksMerge: false
+    enabled: true
+  - id: observability.debuggable_failure
+    kind: soft
+    category: observability
+    tags: [observability, debugging]
+    description: Failure modes should be diagnosable with useful logs, errors, or traces.
+    severityBehavior:
+      defaultSeverity: MINOR
+      maxSeverity: MAJOR
+      onViolation: COMMENT
+      blocksMerge: false
+    enabled: true
+  - id: testability.verifiable_behavior
+    kind: soft
+    category: testability
+    tags: [testing, verification]
+    description: Behavior changes should be verifiable through focused tests or checks.
+    severityBehavior:
+      defaultSeverity: MAJOR
+      maxSeverity: MAJOR
+      onViolation: COMMENT
+      blocksMerge: false
+    enabled: true
+  - id: simplicity.minimal_necessary_change
+    kind: soft
+    category: simplicity
+    tags: [simplicity, scope]
+    description: Changes should stay close to the minimal necessary solution.
+    severityBehavior:
+      defaultSeverity: MINOR
+      maxSeverity: MAJOR
+      onViolation: COMMENT
+      blocksMerge: false
+    enabled: true

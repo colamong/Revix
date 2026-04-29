@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "repo": "example/repo",
+    "number": 42,
+    "title": "Add session token handling",
+    "body": "Adds token handling to auth session creation.",
+    "author": "alice",
+    "labels": ["force-security"],
+    "base_ref": "main",
+    "head_ref": "feature/session-token"
+  },
+  "changed_files": [
+    {
+      "path": "src/auth/session.js",
+      "status": "modified",
+      "additions": 2,
+      "deletions": 1
+    }
+  ],
+  "raw_diff": "diff --git a/src/auth/session.js b/src/auth/session.js\n--- a/src/auth/session.js\n+++ b/src/auth/session.js\n@@ -1,2 +1,3 @@\n const a = 1;\n+logger.info({ token: session.token });\n const b = 2;\n"
+}

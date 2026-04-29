@@ -1,0 +1,16 @@
+import "./constitution.test.js";
+import "./findings.test.js";
+import "./reviewer-skills.test.js";
+import "./config.test.js";
+import "./pr-input.test.js";
+import "./classification.test.js";
+import "./reviewer-selection.test.js";
+import "./reviewer-runner.test.js";
+import "./conflicts.test.js";
+import "./synthesis.test.js";
+import "./decision.test.js";
+import "./github-comment-renderer.test.js";
+import "./orchestrator.test.js";
+import "./cli.test.js";
+import "./schemas.test.js";
+import "./pipeline-smoke.test.js";
