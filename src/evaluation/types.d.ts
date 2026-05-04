@@ -12,6 +12,7 @@ export interface ExpectedReviewIssue {
   allowed_claims?: string[];
   root_cause?: string;
   weight?: number;
+  matchability?: "high" | "low";
 }
 
 export interface ReviewEvalCase {

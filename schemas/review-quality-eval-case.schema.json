@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://revix.dev/schemas/review-quality-eval-case.schema.json",
+  "title": "Revix review quality eval case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eval_id", "expected_issues"],
+  "properties": {
+    "eval_id": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "pr_input": { "type": "object" },
+    "expected_issues": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/expected_issue" }
+    },
+    "expected_verdict": {
+      "enum": ["APPROVE", "COMMENT", "REQUEST_CHANGES", "BLOCK"]
+    },
+    "human_review_comments": {
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  },
+  "$defs": {
+    "expected_issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issue_id", "category", "severity", "claim", "file_path", "line_start", "line_end"],
+      "properties": {
+        "issue_id": { "type": "string", "minLength": 1 },
+        "category": {
+          "enum": ["security", "data_loss", "contract", "correctness", "reliability", "performance", "test", "docs", "documentation", "completeness", "readability", "style", "nit"]
+        },
+        "severity": {
+          "enum": ["BLOCKER", "MAJOR", "MINOR", "NIT", "QUESTION"]
+        },
+        "claim": { "type": "string", "minLength": 1 },
+        "file_path": { "type": "string", "minLength": 1 },
+        "line_start": { "type": "integer", "minimum": 1 },
+        "line_end": { "type": "integer", "minimum": 1 },
+        "allowed_claims": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "root_cause": { "type": "string", "minLength": 1 },
+        "weight": { "type": "number", "exclusiveMinimum": 0 },
+        "matchability": {
+          "type": "string",
+          "enum": ["high", "low"],
+          "description": "Whether a general AI reviewer can be expected to catch this issue without project-specific knowledge."
+        }
+      }
+    }
+  }
+}
