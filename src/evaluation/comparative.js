@@ -405,6 +405,21 @@ export function renderComparativeMarkdown(report) {
     }
   }
   lines.push("");
+  lines.push("## Top Match Blockers");
+  lines.push("");
+  lines.push("| Reviewer | Blocker | Count |");
+  lines.push("| --- | --- | ---: |");
+  for (const [reviewer, item] of Object.entries(report.reviewers)) {
+    const blockers = aggregateMatchBlockers(item.cases ?? []);
+    if (Object.keys(blockers).length === 0) {
+      lines.push(`| ${reviewer} | none | 0 |`);
+    } else {
+      for (const [reason, count] of Object.entries(blockers)) {
+        lines.push(`| ${reviewer} | ${reason} | ${count} |`);
+      }
+    }
+  }
+  lines.push("");
   lines.push("## Improvement Candidates");
   if (report.improvement_candidates.length === 0) {
     lines.push("- None above the 10 point gap threshold.");
@@ -566,6 +581,10 @@ function normalizeFindingForSelectedRevixScope({ finding, reviewerId, context })
     reviewer_id: reviewerId,
     tags: tags.length > 0 ? tags : [fallbackTag],
     related_quality_rules: relatedRules.length > 0 ? relatedRules : [fallbackRule],
+    claim: normalizeEvalConcreteText(finding.claim, "Reviewer identified an actionable PR issue."),
+    impact: normalizeEvalConcreteText(finding.impact, "This can cause a regression, confusing behavior, or a missed review requirement for users."),
+    suggested_fix: normalizeEvalConcreteText(finding.suggested_fix, "Update the changed code so the flagged behavior is handled explicitly and safely."),
+    verification_test: normalizeEvalConcreteText(finding.verification_test, "Add or run a focused regression test that exercises the flagged PR behavior."),
     evidence: normalizeEvalEvidenceRange(finding.evidence)
   };
   let severity = normalized.severity;
@@ -603,14 +622,22 @@ function isClarificationQuestionFinding(finding) {
   return finding.claim.includes("?") || finding.tags.includes("question") || finding.tags.includes("needs-clarification");
 }
 
+function normalizeEvalConcreteText(value, fallback) {
+  const text = String(value ?? "").trim();
+  const lower = text.toLowerCase();
+  const vague = ["bad", "unclear", "maybe", "looks wrong", "fix this", "check it"].some((phrase) => lower.includes(phrase));
+  return text.length >= 12 && !vague ? text : fallback;
+}
+
 function normalizeModelEvidence(evidence, evalCase) {
   if (typeof evidence === "string") {
     return evidenceFromText(evidence, evalCase);
   }
   const fallbackFile = firstChangedFile(evalCase);
   const lineStart = normalizePositiveInteger(evidence.line_start ?? evidence.line ?? evidence.start_line);
+  const rawFile = String(evidence.file_path ?? evidence.path ?? evidence.file ?? fallbackFile);
   return {
-    file_path: String(evidence.file_path ?? evidence.path ?? evidence.file ?? fallbackFile),
+    file_path: resolveEvidenceFilePath(rawFile, evalCase),
     line_start: lineStart,
     line_end: normalizePositiveInteger(evidence.line_end ?? evidence.end_line ?? lineStart),
     snippet: concrete(evidence.snippet ?? evidence.diff_hunk ?? evidence.code, "Evidence is in the PR diff for this changed file.")
@@ -621,15 +648,51 @@ function evidenceFromText(text, evalCase) {
   const fallbackFile = firstChangedFile(evalCase);
   const file = /`([^`]+\.[A-Za-z0-9]+)`/.exec(text)?.[1]
     ?? /([\w./-]+\.[A-Za-z0-9]+)\s+line/i.exec(text)?.[1]
+    ?? fileTokenFromText(text)
     ?? fallbackFile;
   const parsedLine = Number.parseInt(/line[s]?\s+(\d+)/i.exec(text)?.[1], 10);
   const lineStart = Number.isFinite(parsedLine) && parsedLine > 0 ? parsedLine : 1;
   return {
-    file_path: file,
+    file_path: resolveEvidenceFilePath(file, evalCase),
     line_start: lineStart,
     line_end: lineStart,
     snippet: concrete(text.slice(0, 500), "Evidence is in the PR diff for this changed file.")
   };
+}
+
+function resolveEvidenceFilePath(rawFile, evalCase) {
+  const text = String(rawFile ?? "").trim();
+  if (!text) return firstChangedFile(evalCase);
+  const changedFiles = changedFilePaths(evalCase);
+  if (changedFiles.includes(text)) return text;
+  const directSuffix = changedFiles.filter((path) => path.endsWith(`/${text}`) || path.endsWith(`\\${text}`));
+  if (directSuffix.length === 1) return directSuffix[0];
+  const tokens = fileTokensFromText(text);
+  for (const token of tokens) {
+    if (changedFiles.includes(token)) return token;
+    const tokenBase = basename(token);
+    const matches = changedFiles.filter((path) => basename(path) === tokenBase);
+    if (matches.length === 1) return matches[0];
+  }
+  return text;
+}
+
+function fileTokenFromText(text) {
+  return fileTokensFromText(text)[0] ?? null;
+}
+
+function fileTokensFromText(text) {
+  return [...new Set(String(text ?? "").match(/[A-Za-z0-9_./-]+\.[A-Za-z0-9_]+/g) ?? [])];
+}
+
+function changedFilePaths(evalCase) {
+  return normalizeChangedFiles(evalCase?.pr_input?.diff?.files ?? evalCase?.pr_input?.metadata?.files_changed ?? [])
+    .map((file) => file.path)
+    .filter(Boolean);
+}
+
+function basename(path) {
+  return String(path ?? "").split(/[\\/]/).pop();
 }
 
 function outputContract(reviewer) {
@@ -650,6 +713,18 @@ function outputContract(reviewer) {
     },
     reviewer_id: reviewer
   };
+}
+
+function aggregateMatchBlockers(cases) {
+  const counts = {};
+  for (const evaluation of cases) {
+    for (const diagnostic of evaluation.match_diagnostics ?? []) {
+      if (diagnostic.matched) continue;
+      const reason = diagnostic.miss_reason ?? "unknown";
+      counts[reason] = (counts[reason] ?? 0) + 1;
+    }
+  }
+  return Object.fromEntries(Object.entries(counts).sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])));
 }
 
 function renderPrompt(prompt) {

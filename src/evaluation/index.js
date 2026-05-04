@@ -49,6 +49,7 @@ export async function evaluateReviewQuality({ evalCase, reviewResult }) {
   const matchableExpectedIssues = evalCase.expected_issues.filter((issue) => !isLowMatchabilityIssue(issue));
   const matchableMatches = matches.filter((match) => !isLowMatchabilityIssue(match.expected_issue));
   const skippedIssues = evalCase.expected_issues.filter(isLowMatchabilityIssue);
+  const matchDiagnostics = await matchDiagnosticsFor(matchableExpectedIssues, findings, matchableMatches);
   const lowMatchedFindingIds = new Set(matches
     .filter((match) => isLowMatchabilityIssue(match.expected_issue) && match.matched)
     .map((match) => match.finding.finding_id));
@@ -73,6 +74,7 @@ export async function evaluateReviewQuality({ evalCase, reviewResult }) {
     precision_recall_f1: precisionRecallF1(detection, precision),
     category_recall: categoryRecall,
     category_breakdown: categoryBreakdown,
+    match_diagnostics: matchDiagnostics,
     severity_confusion: severityConfusion(matchableExpectedIssues, matchableMatches),
     matches,
     missed_issues: missedIssues(matchableExpectedIssues, matchableMatches),
@@ -420,6 +422,59 @@ function falsePositives(findings, matches) {
     claim: finding.claim,
     evidence: finding.evidence
   })));
+}
+
+async function matchDiagnosticsFor(expectedIssues, findings, matches) {
+  const matchesByIssue = new Map(matches.map((match) => [match.expected_issue.issue_id, match]));
+  const diagnostics = [];
+  for (const issue of expectedIssues) {
+    const match = matchesByIssue.get(issue.issue_id);
+    let best = null;
+    for (const finding of findings) {
+      const score = await matchScore(issue, finding);
+      if (!best || score.total > best.score) {
+        best = { finding, score: score.total, details: score.details };
+      }
+    }
+    const threshold = matchThreshold(issue);
+    diagnostics.push(Object.freeze({
+      issue_id: issue.issue_id,
+      category: issue.category,
+      threshold,
+      matched: Boolean(match?.matched),
+      match_score: match?.match_score ?? 0,
+      miss_reason: match?.matched ? "matched" : matchMissReason({ issue, best, threshold }),
+      expected_issue: freezeIssue(issue),
+      top_candidate: best ? freezeDiagnosticCandidate(best.finding, best.score, best.details) : null
+    }));
+  }
+  return Object.freeze(diagnostics);
+}
+
+function freezeDiagnosticCandidate(finding, score, details) {
+  return Object.freeze({
+    finding_id: finding.finding_id,
+    reviewer_id: finding.reviewer_id,
+    claim: finding.claim,
+    evidence: Object.freeze({ ...finding.evidence }),
+    score: roundRatio(score),
+    details: Object.freeze({
+      file: roundRatio(details.file),
+      line: roundRatio(details.line),
+      claim: roundRatio(details.claim),
+      category: roundRatio(details.category)
+    })
+  });
+}
+
+function matchMissReason({ issue, best, threshold }) {
+  if (!best) return "no_candidate";
+  if (best.score >= threshold) return "matched";
+  if (best.details.file <= 0.5) return "file_mismatch";
+  if (!isFileLevelIssue(issue) && best.details.line <= 0.5) return "line_mismatch";
+  if (best.details.claim < 0.6) return "claim_mismatch";
+  if (best.details.category === 0) return "category_mismatch";
+  return "below_threshold";
 }
 
 function issueWeight(issue) {

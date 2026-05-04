@@ -16,6 +16,7 @@ import {
   countComparativeReportErrors,
   createCommandModelRunner,
   DEFAULT_EVAL_COMMAND,
+  normalizeModelFindings,
   preflightModelRunner,
   normalizeRevixModelFindings,
   renderComparativeMarkdown
@@ -245,6 +246,103 @@ test("includes category_breakdown in JSON report output", async () => {
   assert.ok("security" in evaluation.category_breakdown);
 });
 
+test("includes match_diagnostics with top candidate score details", async () => {
+  const evaluation = await evaluateReviewQuality({
+    evalCase: evalCase({ expected_issues: [expectedIssue()] }),
+    reviewResult: reviewResult({
+      findings: [finding({
+        finding_id: "near-miss",
+        evidence: { ...finding().evidence, file_path: "src/other.js", line_start: 22, line_end: 22 },
+        claim: "Logging the token may expose credentials to log readers."
+      })]
+    })
+  });
+
+  assert.equal(evaluation.match_diagnostics.length, 1);
+  assert.equal(evaluation.match_diagnostics[0].issue_id, "expected-security");
+  assert.equal(evaluation.match_diagnostics[0].matched, false);
+  assert.equal(evaluation.match_diagnostics[0].top_candidate.finding_id, "near-miss");
+  assert.ok("file" in evaluation.match_diagnostics[0].top_candidate.details);
+  assert.equal(evaluation.match_diagnostics[0].miss_reason, "file_mismatch");
+});
+
+test("comparative markdown includes top match blockers", async () => {
+  const evaluation = await evaluateReviewQuality({
+    evalCase: evalCase({ expected_issues: [expectedIssue()] }),
+    reviewResult: reviewResult({
+      findings: [finding({
+        evidence: { ...finding().evidence, file_path: "src/other.js", line_start: 22, line_end: 22 },
+        claim: "Logging the token may expose credentials to log readers."
+      })]
+    })
+  });
+  const report = buildComparativeReport([{
+    reviewer: "revix",
+    eval_id: "eval-security",
+    evaluation,
+    error: null,
+    reviewResult: null
+  }]);
+  const markdown = renderComparativeMarkdown(report);
+
+  assert.match(markdown, /Top Match Blockers/);
+  assert.match(markdown, /file_mismatch/);
+});
+
+test("normalizes unique basename evidence to changed file path", () => {
+  const findings = normalizeModelFindings({
+    reviewer: "test",
+    evalCase: evalCase({
+      pr_input: {
+        metadata: { files_changed: [{ path: "src/pkg/_util.pyx" }] },
+        diff: { files: [{ path: "src/pkg/_util.pyx" }] }
+      }
+    }),
+    parsed: {
+      findings: [{
+        severity: "MAJOR",
+        claim: "The helper path handles the new bfloat16 branch incorrectly.",
+        evidence: { file_path: "See also _util.pyx", line_start: 7, line_end: 7, snippet: "helper" },
+        impact: "The changed branch can run the wrong helper behavior.",
+        suggested_fix: "Update the helper branch to use the intended bfloat16 policy.",
+        verification_test: "Run a focused regression test covering the bfloat16 helper.",
+        confidence: "HIGH",
+        related_quality_rules: ["testability.verifiable_behavior"],
+        tags: ["test"]
+      }]
+    }
+  });
+
+  assert.equal(findings[0].evidence.file_path, "src/pkg/_util.pyx");
+});
+
+test("leaves ambiguous basename evidence unchanged", () => {
+  const findings = normalizeModelFindings({
+    reviewer: "test",
+    evalCase: evalCase({
+      pr_input: {
+        metadata: { files_changed: [{ path: "src/pkg/_util.pyx" }, { path: "tests/_util.pyx" }] },
+        diff: { files: [{ path: "src/pkg/_util.pyx" }, { path: "tests/_util.pyx" }] }
+      }
+    }),
+    parsed: {
+      findings: [{
+        severity: "MAJOR",
+        claim: "The helper path handles the new bfloat16 branch incorrectly.",
+        evidence: { file_path: "See also _util.pyx", line_start: 7, line_end: 7, snippet: "helper" },
+        impact: "The changed branch can run the wrong helper behavior.",
+        suggested_fix: "Update the helper branch to use the intended bfloat16 policy.",
+        verification_test: "Run a focused regression test covering the bfloat16 helper.",
+        confidence: "HIGH",
+        related_quality_rules: ["testability.verifiable_behavior"],
+        tags: ["test"]
+      }]
+    }
+  });
+
+  assert.equal(findings[0].evidence.file_path, "See also _util.pyx");
+});
+
 test("comparative report surfaces per-reviewer run errors", async () => {
   const evaluation = await evaluateReviewQuality({
     evalCase: evalCase(),
@@ -376,6 +474,33 @@ test("revix eval normalization repairs reversed evidence line ranges", () => {
   assert.equal(finding.severity, "MINOR");
   assert.equal(finding.evidence.line_start, 9);
   assert.equal(finding.evidence.line_end, 9);
+  assert.equal(validateFindings([finding], evalFindingContext()).length, 1);
+});
+
+test("revix eval normalization replaces vague actionability fields", () => {
+  const [finding] = normalizeRevixModelFindings({
+    reviewer: { reviewer_id: "test" },
+    selection: { scope_context: evalFindingContext() },
+    evalCase: evalCase(),
+    parsed: {
+      findings: [{
+        severity: "MAJOR",
+        claim: "Looks wrong.",
+        evidence: { file_path: "src/auth/session.js", line_start: 2, line_end: 2, snippet: "import moved" },
+        impact: "Bad code.",
+        suggested_fix: "Fix this.",
+        verification_test: "Check it.",
+        confidence: "HIGH",
+        related_quality_rules: ["testability.verifiable_behavior"],
+        tags: ["test"]
+      }]
+    }
+  });
+
+  assert.equal(finding.claim, "Reviewer identified an actionable PR issue.");
+  assert.match(finding.impact, /regression/);
+  assert.match(finding.suggested_fix, /Update the changed code/);
+  assert.match(finding.verification_test, /focused regression test/);
   assert.equal(validateFindings([finding], evalFindingContext()).length, 1);
 });
 

@@ -136,6 +136,34 @@ test("assigns matchability high to substantive correctness claims", () => {
   assert.equal(evalCase.expected_issues[0].matchability, "high");
 });
 
+test("assigns matchability low to subjective discussion-only claims", () => {
+  const evalCase = convertSwePrBenchRecord(record(), {
+    task_id: "linkding__1261",
+    comments: [{
+      comment_id: "c1",
+      body: "I think that this assertion can be removed because it depends on implementation details.",
+      file: "tests/test_settings.py",
+      line: 12
+    }]
+  });
+
+  assert.equal(evalCase.expected_issues[0].matchability, "low");
+});
+
+test("keeps concrete defect signal matchability high despite subjective wording", () => {
+  const evalCase = convertSwePrBenchRecord(record(), {
+    task_id: "linkding__1261",
+    comments: [{
+      comment_id: "c1",
+      body: "I think this fails when the cached profile is stale, causing a regression for active users.",
+      file: "bookmarks/views/settings.py",
+      line: 42
+    }]
+  });
+
+  assert.equal(evalCase.expected_issues[0].matchability, "high");
+});
+
 function record(overrides = {}) {
   return {
     task_id: "linkding__1261",

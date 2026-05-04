@@ -181,8 +181,18 @@ function inferMatchability({ category, claim, body, filePath }) {
   const text = `${claim ?? ""} ${body ?? ""} ${filePath ?? ""}`;
   if (category === "docs" && /```suggestion/.test(text)) return "low";
   if (/\bCHANGELOG\b|codecov\.yml|\.metadata\.json/i.test(text)) return "low";
+  if (hasConcreteDefectSignal(text)) return "high";
+  if (isSubjectiveDiscussionClaim(claim)) return "low";
   if (normalizeTokens(claim).length < 15) return "low";
   return "high";
+}
+
+function hasConcreteDefectSignal(text) {
+  return /\b(crash|fail|fails|failed|failure|error|regression|missing test|wrong behavior|incorrect|incompatible|security|leak|timeout|data loss|breaks?|broken)\b/i.test(text);
+}
+
+function isSubjectiveDiscussionClaim(claim) {
+  return /^(i think|correct me if|is it worth|at some point|i cannot quite understand|hmm\b|yeah,? a bit weird)\b/i.test(String(claim ?? "").trim());
 }
 
 function inferSeverity(record, comment, category) {
