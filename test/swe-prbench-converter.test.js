@@ -77,6 +77,7 @@ test("converts a raw SWE-PRBench directory with eval split filtering", async () 
   assert.equal(cases[0].eval_id, "swe-prbench:linkding__1261");
   assert.equal(summary.count, 1);
   assert.equal(summary.expected_issue_count, 1);
+  assert.deepEqual(summary.matchability, { high: 1 });
 });
 
 test("maps suggestion block comments to docs category", () => {

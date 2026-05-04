@@ -266,6 +266,48 @@ test("includes match_diagnostics with top candidate score details", async () => 
   assert.equal(evaluation.match_diagnostics[0].miss_reason, "file_mismatch");
 });
 
+test("classifies same-basename file mismatch diagnostics separately", async () => {
+  const evaluation = await evaluateReviewQuality({
+    evalCase: evalCase({
+      expected_issues: [expectedIssue({
+        file_path: "src/auth/session.js",
+        line_start: 20,
+        line_end: 20,
+        claim: "The raw token is logged and can expose credentials."
+      })]
+    }),
+    reviewResult: reviewResult({
+      findings: [finding({
+        evidence: { ...finding().evidence, file_path: "tests/auth/session.js", line_start: 200, line_end: 200 },
+        claim: "Session cleanup should cover stale cache handles during retries."
+      })]
+    })
+  });
+
+  assert.equal(evaluation.match_diagnostics[0].miss_reason, "file_mismatch_same_basename");
+});
+
+test("classifies related-area file mismatch diagnostics separately", async () => {
+  const evaluation = await evaluateReviewQuality({
+    evalCase: evalCase({
+      expected_issues: [expectedIssue({
+        file_path: "src/auth/session.js",
+        line_start: 20,
+        line_end: 20,
+        claim: "The raw token is logged and can expose credentials."
+      })]
+    }),
+    reviewResult: reviewResult({
+      findings: [finding({
+        evidence: { ...finding().evidence, file_path: "src/auth/logger.js", line_start: 200, line_end: 200 },
+        claim: "Session cleanup should cover stale cache handles during retries."
+      })]
+    })
+  });
+
+  assert.equal(evaluation.match_diagnostics[0].miss_reason, "file_mismatch_related_area");
+});
+
 test("comparative markdown includes top match blockers", async () => {
   const evaluation = await evaluateReviewQuality({
     evalCase: evalCase({ expected_issues: [expectedIssue()] }),

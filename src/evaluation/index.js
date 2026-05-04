@@ -470,11 +470,28 @@ function freezeDiagnosticCandidate(finding, score, details) {
 function matchMissReason({ issue, best, threshold }) {
   if (!best) return "no_candidate";
   if (best.score >= threshold) return "matched";
-  if (best.details.file <= 0.5) return "file_mismatch";
+  if (best.details.file < 1) return fileMismatchReason(issue, best.finding);
   if (!isFileLevelIssue(issue) && best.details.line <= 0.5) return "line_mismatch";
   if (best.details.claim < 0.6) return "claim_mismatch";
   if (best.details.category === 0) return "category_mismatch";
   return "below_threshold";
+}
+
+function fileMismatchReason(issue, finding) {
+  const expectedFile = issue.file_path;
+  const actualFile = finding.evidence?.file_path;
+  if (!expectedFile || !actualFile) return "file_mismatch";
+  if (basename(expectedFile) === basename(actualFile)) return "file_mismatch_same_basename";
+  if (relatedPathArea(expectedFile) === relatedPathArea(actualFile)) return "file_mismatch_related_area";
+  return "file_mismatch";
+}
+
+function relatedPathArea(path) {
+  return String(path ?? "").split(/[\\/]/).filter(Boolean).slice(0, 2).join("/");
+}
+
+function basename(path) {
+  return String(path ?? "").split(/[\\/]/).pop();
 }
 
 function issueWeight(issue) {

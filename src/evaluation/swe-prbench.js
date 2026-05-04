@@ -272,8 +272,11 @@ function weightFor(category) {
 
 function buildSummary(cases, input) {
   const categories = {};
+  const matchability = {};
   for (const item of cases.flatMap((evalCase) => evalCase.expected_issues)) {
     categories[item.category] = (categories[item.category] ?? 0) + 1;
+    const key = item.matchability ?? "unspecified";
+    matchability[key] = (matchability[key] ?? 0) + 1;
   }
   return {
     source: DEFAULT_SOURCE,
@@ -281,7 +284,8 @@ function buildSummary(cases, input) {
     input,
     count: cases.length,
     expected_issue_count: cases.reduce((sum, evalCase) => sum + evalCase.expected_issues.length, 0),
-    categories: Object.fromEntries(Object.entries(categories).sort(([left], [right]) => left.localeCompare(right)))
+    categories: Object.fromEntries(Object.entries(categories).sort(([left], [right]) => left.localeCompare(right))),
+    matchability: Object.fromEntries(Object.entries(matchability).sort(([left], [right]) => left.localeCompare(right)))
   };
 }
 
