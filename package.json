@@ -10,6 +10,12 @@
     ".": "./src/index.js"
   },
   "scripts": {
-    "test": "node test/run-tests.js"
+    "test": "node test/run-tests.js",
+    "eval:download:swe-prbench": "node scripts/download-swe-prbench.mjs",
+    "eval:convert:swe-prbench": "node scripts/convert-swe-prbench.mjs",
+    "eval:rqs": "node scripts/run-review-quality-eval.mjs"
+  },
+  "dependencies": {
+    "@xenova/transformers": "^2.17.2"
   }
 }
