@@ -81,6 +81,117 @@ test("aggregates smoke eval suite and renders stable report", async () => {
   assert.match(report, /Sub-Scores/);
 });
 
+test("matches file-level issue (line_start=1) with relaxed threshold", async () => {
+  const matches = await matchExpectedIssues([
+    expectedIssue({
+      issue_id: "expected-file-level",
+      category: "contract",
+      claim: "The file-level metadata convention is violated.",
+      file_path: "config/check.metadata.json",
+      line_start: 1,
+      line_end: 1,
+      allowed_claims: [],
+      root_cause: undefined
+    })
+  ], [
+    finding({
+      finding_id: "finding-file-level",
+      reviewer_id: "test",
+      tags: ["test"],
+      related_quality_rules: ["test.coverage_gap"],
+      claim: "The tests need one more explicit branch assertion.",
+      evidence: {
+        ...finding().evidence,
+        file_path: "config/check.metadata.json",
+        line_start: 42,
+        line_end: 42
+      }
+    })
+  ]);
+
+  assert.equal(matches[0].matched, true);
+  assert.equal(matches[0].match_score, 0.35);
+});
+
+test("awards partial category credit when file+line match but category differs", async () => {
+  const score = await matchScore(
+    expectedIssue({
+      category: "contract",
+      claim: "The response shape removes a required field from the API contract.",
+      file_path: "api/openapi.yml",
+      line_start: 10,
+      line_end: 10
+    }),
+    finding({
+      reviewer_id: "test",
+      tags: ["test"],
+      related_quality_rules: ["test.coverage_gap"],
+      claim: "The response shape removes a required field from the API contract.",
+      evidence: {
+        ...finding().evidence,
+        file_path: "api/openapi.yml",
+        line_start: 10,
+        line_end: 10
+      }
+    })
+  );
+
+  assert.equal(score.details.category, 0.5);
+  assert.ok(score.total > 0.8);
+});
+
+test("matches semantically equivalent claims with cosine similarity", async () => {
+  const score = await matchScore(
+    expectedIssue({
+      claim: "The raw token is logged and can expose credentials.",
+      allowed_claims: []
+    }),
+    finding({
+      claim: "Logging the raw token can expose credentials in application logs."
+    })
+  );
+
+  assert.ok(score.details.claim >= 0.6);
+});
+
+test("excludes low-matchability issues from RQS denominator", async () => {
+  const evaluation = await evaluateReviewQuality({
+    evalCase: evalCase({
+      expected_issues: [
+        expectedIssue(),
+        expectedIssue({
+          issue_id: "expected-low",
+          category: "docs",
+          severity: "MINOR",
+          claim: "```suggestion Rename this title. ```",
+          file_path: "CHANGELOG.md",
+          line_start: 1,
+          line_end: 1,
+          matchability: "low"
+        })
+      ]
+    }),
+    reviewResult: reviewResult({ findings: [finding()] })
+  });
+
+  assert.equal(evaluation.sub_scores.detection, 100);
+  assert.equal(evaluation.precision_recall_f1.recall, 100);
+  assert.equal(evaluation.skipped_issues.length, 1);
+  assert.deepEqual(evaluation.missed_issues, []);
+});
+
+test("includes category_breakdown in JSON report output", async () => {
+  const evaluation = await evaluateReviewQuality({
+    evalCase: evalCase({ expected_issues: [expectedIssue({ category: "correctness" })] }),
+    reviewResult: reviewResult({ findings: [finding({ tags: ["correctness"], reviewer_id: "correctness" })] })
+  });
+
+  assert.ok(evaluation.category_breakdown);
+  assert.equal(evaluation.category_breakdown.correctness.expected, 1);
+  assert.equal(evaluation.category_breakdown.correctness.matched, 1);
+  assert.ok("security" in evaluation.category_breakdown);
+});
+
 function smokeEvalCases() {
   return [
     { evalCase: evalCase({ eval_id: "internal-clean", expected_issues: [], expected_verdict: "APPROVE" }), reviewResult: reviewResult({ findings: [], verdict: "APPROVE" }) },
