@@ -39,9 +39,11 @@ export interface ReviewQualityEvaluation {
   sub_scores: ReviewQualitySubScores;
   precision_recall_f1: { precision: number; recall: number; f1: number };
   category_recall: Record<string, number>;
+  category_breakdown: Record<string, { expected: number; matched: number; recall: number; avg_rqs: number }>;
   severity_confusion: object;
   matches: object[];
   missed_issues: object[];
+  skipped_issues: object[];
   false_positives: object[];
   expected_verdict?: Verdict;
   actual_verdict: string;

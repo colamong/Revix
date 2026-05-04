@@ -21,6 +21,7 @@ const BLOCKING_SEVERITIES = new Set(["MAJOR", "BLOCKER"]);
 const LINE_LEVEL_MATCH_THRESHOLD = 0.45;
 const FILE_LEVEL_MATCH_THRESHOLD = 0.30;
 const SEMANTIC_CLAIM_THRESHOLD = 0.60;
+const BREAKDOWN_CATEGORIES = Object.freeze(["correctness", "security", "contract", "test", "docs", "performance"]);
 const embeddingCache = new Map();
 let embedderPromise = null;
 let embeddingUnavailable = false;
@@ -50,16 +51,24 @@ export async function evaluateReviewQuality({ evalCase, reviewResult }) {
   const finalDecision = reviewResult?.finalDecision ?? reviewResult?.final_decision ?? {};
   const outputMarkdown = reviewResult?.output?.markdown ?? reviewResult?.markdown ?? "";
   const matches = await matchExpectedIssues(evalCase.expected_issues, findings);
-  const detection = scoreDetection(evalCase.expected_issues, matches);
-  const precision = scorePrecision(findings, matches);
-  const evidence = scoreEvidence(evalCase.expected_issues, matches);
-  const severity = scoreSeverity(evalCase.expected_issues, matches);
-  const actionability = scoreActionability(matches, findings);
+  const matchableExpectedIssues = evalCase.expected_issues.filter((issue) => !isLowMatchabilityIssue(issue));
+  const matchableMatches = matches.filter((match) => !isLowMatchabilityIssue(match.expected_issue));
+  const skippedIssues = evalCase.expected_issues.filter(isLowMatchabilityIssue);
+  const lowMatchedFindingIds = new Set(matches
+    .filter((match) => isLowMatchabilityIssue(match.expected_issue) && match.matched)
+    .map((match) => match.finding.finding_id));
+  const matchableFindings = findings.filter((finding) => !lowMatchedFindingIds.has(finding.finding_id));
+  const detection = scoreDetection(matchableExpectedIssues, matchableMatches);
+  const precision = scorePrecision(matchableFindings, matchableMatches);
+  const evidence = scoreEvidence(matchableExpectedIssues, matchableMatches);
+  const severity = scoreSeverity(matchableExpectedIssues, matchableMatches);
+  const actionability = scoreActionability(matchableMatches, matchableFindings);
   const decision = scoreDecision(evalCase.expected_verdict, finalDecision.verdict);
   const noise = scoreNoise({ findings, matches, synthesisOptions, outputMarkdown });
   const subScores = { detection, precision, evidence, severity, actionability, decision, noise };
   const rqs = weightedScore(subScores);
-  const categoryRecall = categoryRecallFor(evalCase.expected_issues, matches);
+  const categoryRecall = categoryRecallFor(matchableExpectedIssues, matchableMatches);
+  const categoryBreakdown = categoryBreakdownFor(matchableExpectedIssues, matchableMatches);
 
   return deepFreeze({
     eval_id: evalCase.eval_id,
@@ -67,9 +76,11 @@ export async function evaluateReviewQuality({ evalCase, reviewResult }) {
     sub_scores: subScores,
     precision_recall_f1: precisionRecallF1(detection, precision),
     category_recall: categoryRecall,
-    severity_confusion: severityConfusion(evalCase.expected_issues, matches),
+    category_breakdown: categoryBreakdown,
+    severity_confusion: severityConfusion(matchableExpectedIssues, matchableMatches),
     matches,
-    missed_issues: missedIssues(evalCase.expected_issues, matches),
+    missed_issues: missedIssues(matchableExpectedIssues, matchableMatches),
+    skipped_issues: Object.freeze(skippedIssues.map(freezeIssue)),
     false_positives: falsePositives(findings, matches),
     expected_verdict: evalCase.expected_verdict,
     actual_verdict: finalDecision.verdict ?? "UNKNOWN"
@@ -83,9 +94,9 @@ export function evaluateReviewQualitySuite(results) {
   const cases = results.map((item) => item.evaluation ?? item);
   const average = (field) => round(cases.reduce((sum, item) => sum + item.sub_scores[field], 0) / Math.max(cases.length, 1));
   const subScores = Object.fromEntries(Object.keys(RQS_WEIGHTS).map((field) => [field, average(field)]));
-  const totalExpected = cases.reduce((sum, item) => sum + item.matches.length + item.missed_issues.length, 0);
-  const totalMatched = cases.reduce((sum, item) => sum + item.matches.filter((match) => match.matched).length, 0);
-  const totalFindings = cases.reduce((sum, item) => sum + item.matches.filter((match) => match.matched).length + item.false_positives.length, 0);
+  const totalExpected = cases.reduce((sum, item) => sum + item.matches.filter((match) => !isLowMatchabilityIssue(match.expected_issue)).length + item.missed_issues.length, 0);
+  const totalMatched = cases.reduce((sum, item) => sum + item.matches.filter((match) => !isLowMatchabilityIssue(match.expected_issue) && match.matched).length, 0);
+  const totalFindings = cases.reduce((sum, item) => sum + item.matches.filter((match) => !isLowMatchabilityIssue(match.expected_issue) && match.matched).length + item.false_positives.length, 0);
   const recall = totalExpected === 0 ? 100 : round((totalMatched / totalExpected) * 100);
   const precision = totalFindings === 0 ? 100 : round((totalMatched / totalFindings) * 100);
   const f1 = precision + recall === 0 ? 0 : round((2 * precision * recall) / (precision + recall));
@@ -94,6 +105,7 @@ export function evaluateReviewQualitySuite(results) {
     rqs: weightedScore(subScores),
     sub_scores: subScores,
     precision_recall_f1: { precision, recall, f1 },
+    category_breakdown: aggregateCategoryBreakdown(cases),
     cases
   });
 }
@@ -109,6 +121,24 @@ export function renderReviewQualityReport(evaluation) {
   lines.push("## Sub-Scores");
   for (const [key, value] of Object.entries(evaluation.sub_scores)) {
     lines.push(`- ${key}: ${value}`);
+  }
+  lines.push("");
+  lines.push("## Category Breakdown");
+  lines.push("");
+  lines.push("| Category | Expected | Matched | Recall | Avg RQS |");
+  lines.push("| --- | ---: | ---: | ---: | ---: |");
+  for (const [category, item] of Object.entries(evaluation.category_breakdown ?? emptyCategoryBreakdown())) {
+    lines.push(`| ${category} | ${item.expected} | ${item.matched} | ${item.recall} | ${item.avg_rqs} |`);
+  }
+  lines.push("");
+  lines.push("## Skipped Issues (low matchability)");
+  if ((evaluation.skipped_issues ?? []).length === 0) {
+    lines.push("- None.");
+  } else {
+    lines.push(`- Skipped issues (low matchability): ${evaluation.skipped_issues.length}`);
+    for (const issue of evaluation.skipped_issues) {
+      lines.push(`- ${issue.issue_id}: ${issue.claim}`);
+    }
   }
   lines.push("");
   lines.push("## Missed Issues");
@@ -283,6 +313,54 @@ function categoryRecallFor(expectedIssues, matches) {
   ])));
 }
 
+function categoryBreakdownFor(expectedIssues, matches) {
+  const entries = emptyCategoryBreakdown();
+  const matchesByIssue = new Map(matches.map((match) => [match.expected_issue.issue_id, match]));
+  for (const issue of expectedIssues) {
+    if (!entries[issue.category]) continue;
+    const entry = entries[issue.category];
+    const match = matchesByIssue.get(issue.issue_id);
+    entry.expected += 1;
+    if (match?.matched) entry.matched += 1;
+    entry._score += match?.matched ? match.match_score * 100 : 0;
+  }
+  return finalizeCategoryBreakdown(entries);
+}
+
+function aggregateCategoryBreakdown(cases) {
+  const entries = emptyCategoryBreakdown();
+  for (const evaluation of cases) {
+    const breakdown = evaluation.category_breakdown ?? emptyCategoryBreakdown();
+    for (const category of BREAKDOWN_CATEGORIES) {
+      const source = breakdown[category] ?? { expected: 0, matched: 0, avg_rqs: 0 };
+      const entry = entries[category];
+      entry.expected += source.expected;
+      entry.matched += source.matched;
+      entry._score += source.avg_rqs * source.expected;
+    }
+  }
+  return finalizeCategoryBreakdown(entries);
+}
+
+function emptyCategoryBreakdown() {
+  return Object.fromEntries(BREAKDOWN_CATEGORIES.map((category) => [
+    category,
+    { expected: 0, matched: 0, recall: 0, avg_rqs: 0, _score: 0 }
+  ]));
+}
+
+function finalizeCategoryBreakdown(entries) {
+  return Object.freeze(Object.fromEntries(BREAKDOWN_CATEGORIES.map((category) => {
+    const entry = entries[category];
+    return [category, Object.freeze({
+      expected: entry.expected,
+      matched: entry.matched,
+      recall: entry.expected === 0 ? 0 : round((entry.matched / entry.expected) * 100),
+      avg_rqs: entry.expected === 0 ? 0 : round(entry._score / entry.expected)
+    })];
+  })));
+}
+
 function severityConfusion(expectedIssues, matches) {
   const rows = {};
   for (const severity of SEVERITY_ORDER) {
@@ -316,6 +394,10 @@ function falsePositives(findings, matches) {
 function issueWeight(issue) {
   if (typeof issue.weight === "number" && issue.weight > 0) return issue.weight;
   return CATEGORY_WEIGHTS[issue.category] ?? 1;
+}
+
+function isLowMatchabilityIssue(issue) {
+  return issue?.matchability === "low";
 }
 
 function lineMatchScore(issue, finding) {
@@ -527,7 +609,8 @@ function freezeIssue(issue) {
     file_path: issue.file_path,
     line_start: issue.line_start,
     line_end: issue.line_end,
-    weight: issueWeight(issue)
+    weight: issueWeight(issue),
+    matchability: issue.matchability
   });
 }
 

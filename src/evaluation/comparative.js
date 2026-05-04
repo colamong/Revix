@@ -298,6 +298,16 @@ export function renderComparativeMarkdown(report) {
     lines.push(`| ${reviewer} | ${item.rqs} | ${item.sub_scores.detection} | ${item.sub_scores.precision} | ${item.sub_scores.evidence} | ${item.sub_scores.severity} | ${item.sub_scores.actionability} | ${item.sub_scores.decision} | ${item.sub_scores.noise} | ${item.errors.length} |`);
   }
   lines.push("");
+  lines.push("## Category Breakdown");
+  lines.push("");
+  lines.push("| Reviewer | Category | Expected | Matched | Recall | Avg RQS |");
+  lines.push("| --- | --- | ---: | ---: | ---: | ---: |");
+  for (const [reviewer, item] of Object.entries(report.reviewers)) {
+    for (const [category, breakdown] of Object.entries(item.category_breakdown ?? {})) {
+      lines.push(`| ${reviewer} | ${category} | ${breakdown.expected} | ${breakdown.matched} | ${breakdown.recall} | ${breakdown.avg_rqs} |`);
+    }
+  }
+  lines.push("");
   lines.push("## Improvement Candidates");
   if (report.improvement_candidates.length === 0) {
     lines.push("- None above the 10 point gap threshold.");
