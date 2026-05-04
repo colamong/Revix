@@ -17,8 +17,10 @@ import {
   createCommandModelRunner,
   DEFAULT_EVAL_COMMAND,
   preflightModelRunner,
+  normalizeRevixModelFindings,
   renderComparativeMarkdown
 } from "../src/evaluation/comparative.js";
+import { validateFindings } from "../src/findings/index.js";
 
 test("matches exact, near-line, and root-cause equivalent findings", async () => {
   const exact = await matchScore(expectedIssue(), finding());
@@ -259,7 +261,7 @@ test("comparative report surfaces per-reviewer run errors", async () => {
           name: "ReviewerRunError",
           message: "reviewer failed: security",
           reviewerId: "security",
-          cause: { code: "EPERM" }
+          cause: { name: "FindingValidationError", message: "finding tag is outside reviewer scope: metadata", code: "EPERM" }
         }]
       }
     }
@@ -268,10 +270,113 @@ test("comparative report surfaces per-reviewer run errors", async () => {
   assert.equal(report.reviewers.revix.errors.length, 1);
   assert.equal(report.reviewers.revix.errors[0].reviewer_id, "security");
   assert.equal(report.reviewers.revix.errors[0].cause.code, "EPERM");
+  assert.equal(report.reviewers.revix.errors[0].cause.message, "finding tag is outside reviewer scope: metadata");
 });
 
 test("comparative eval defaults to the Codex eval runner", () => {
   assert.equal(DEFAULT_EVAL_COMMAND, "node scripts/codex-eval-runner.mjs");
+});
+
+test("revix eval normalization coerces findings into selected reviewer scope", () => {
+  const findings = normalizeRevixModelFindings({
+    reviewer: { reviewer_id: "test" },
+    selection: { scope_context: evalFindingContext() },
+    evalCase: evalCase(),
+    parsed: {
+      findings: [{
+        reviewer_id: "other",
+        severity: "MAJOR",
+        category: "metadata",
+        claim: "The moved public import path is missing compatibility coverage.",
+        evidence: { file_path: "src/auth/session.js", line_start: 2, line_end: 2, snippet: "import moved" },
+        impact: "Downstream users can lose coverage for a moved import path.",
+        suggested_fix: "Add a regression test for the moved import path and compatibility behavior.",
+        verification_test: "Run a focused import compatibility regression test.",
+        confidence: "HIGH",
+        related_quality_rules: ["metadata.typo"],
+        tags: ["metadata"]
+      }]
+    }
+  });
+
+  assert.equal(findings[0].reviewer_id, "test");
+  assert.deepEqual(findings[0].tags, ["test"]);
+  assert.deepEqual(findings[0].related_quality_rules, ["testability.verifiable_behavior"]);
+  assert.equal(validateFindings(findings, evalFindingContext()).length, 1);
+});
+
+test("revix eval normalization downgrades BLOCKER without a hard rule", () => {
+  const [finding] = normalizeRevixModelFindings({
+    reviewer: { reviewer_id: "test" },
+    selection: { scope_context: evalFindingContext() },
+    evalCase: evalCase(),
+    parsed: {
+      findings: [{
+        severity: "BLOCKER",
+        claim: "The moved public import path is missing compatibility coverage.",
+        evidence: { file_path: "src/auth/session.js", line_start: 2, line_end: 2, snippet: "import moved" },
+        impact: "Downstream users can lose coverage for a moved import path.",
+        suggested_fix: "Add a regression test for the moved import path and compatibility behavior.",
+        verification_test: "Run a focused import compatibility regression test.",
+        confidence: "HIGH",
+        related_quality_rules: ["testability.verifiable_behavior"],
+        tags: ["test"]
+      }]
+    }
+  });
+
+  assert.equal(finding.severity, "MAJOR");
+  assert.equal(validateFindings([finding], evalFindingContext()).length, 1);
+});
+
+test("revix eval normalization raises MAJOR low confidence to medium confidence", () => {
+  const [finding] = normalizeRevixModelFindings({
+    reviewer: { reviewer_id: "test" },
+    selection: { scope_context: evalFindingContext() },
+    evalCase: evalCase(),
+    parsed: {
+      findings: [{
+        severity: "MAJOR",
+        claim: "The moved public import path is missing compatibility coverage.",
+        evidence: { file_path: "src/auth/session.js", line_start: 2, line_end: 2, snippet: "import moved" },
+        impact: "Downstream users can lose coverage for a moved import path.",
+        suggested_fix: "Add a regression test for the moved import path and compatibility behavior.",
+        verification_test: "Run a focused import compatibility regression test.",
+        confidence: "LOW",
+        related_quality_rules: ["testability.verifiable_behavior"],
+        tags: ["test"]
+      }]
+    }
+  });
+
+  assert.equal(finding.confidence, "MEDIUM");
+  assert.equal(validateFindings([finding], evalFindingContext()).length, 1);
+});
+
+test("revix eval normalization repairs reversed evidence line ranges", () => {
+  const [finding] = normalizeRevixModelFindings({
+    reviewer: { reviewer_id: "test" },
+    selection: { scope_context: evalFindingContext() },
+    evalCase: evalCase(),
+    parsed: {
+      findings: [{
+        severity: "QUESTION",
+        claim: "The moved public import path is missing compatibility coverage.",
+        evidence: { file_path: "src/auth/session.js", line_start: 9, line_end: 2, snippet: "import moved" },
+        impact: "Downstream users can lose coverage for a moved import path.",
+        suggested_fix: "Add a regression test for the moved import path and compatibility behavior.",
+        verification_test: "Run a focused import compatibility regression test.",
+        confidence: "MEDIUM",
+        related_quality_rules: ["testability.verifiable_behavior"],
+        tags: ["test"]
+      }]
+    }
+  });
+
+  assert.equal(finding.severity, "MINOR");
+  assert.equal(finding.evidence.line_start, 9);
+  assert.equal(finding.evidence.line_end, 9);
+  assert.equal(validateFindings([finding], evalFindingContext()).length, 1);
 });
 
 test("command runner wraps launch failures with structured details", async () => {
@@ -487,6 +592,18 @@ function reviewResult({ findings = [finding()], verdict = "BLOCK", synthesisOpti
     synthesisOptions,
     finalDecision: { verdict },
     output: { markdown }
+  };
+}
+
+function evalFindingContext() {
+  return {
+    reviewer_id: "test",
+    allowed_tags: ["test", "regression"],
+    allowed_quality_rules: ["testability.verifiable_behavior"],
+    quality_rules: [
+      { id: "testability.verifiable_behavior", kind: "soft", enabled: true },
+      { id: "security.no_new_risk", kind: "hard", enabled: true }
+    ]
   };
 }
 

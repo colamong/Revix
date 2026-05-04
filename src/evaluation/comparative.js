@@ -206,20 +206,11 @@ export function normalizeModelFindings({ parsed, reviewer, evalCase }) {
 
 export function normalizeRevixModelFindings({ parsed, reviewer, selection, evalCase }) {
   const normalized = normalizeModelFindings({ parsed, reviewer: reviewer.reviewer_id, evalCase });
-  const allowedTags = selection.scope_context.allowed_tags;
-  const allowedRules = selection.scope_context.allowed_quality_rules;
-  const fallbackTag = allowedTags[0] ?? reviewer.reviewer_id;
-  const fallbackRule = allowedRules[0] ?? `${fallbackTag}.benchmark_signal`;
-  return normalized.map((finding) => {
-    const tags = finding.tags.filter((tag) => allowedTags.includes(tag));
-    const relatedRules = finding.related_quality_rules.filter((ruleId) => allowedRules.includes(ruleId));
-    return {
-      ...finding,
-      reviewer_id: reviewer.reviewer_id,
-      tags: tags.length > 0 ? tags : [fallbackTag],
-      related_quality_rules: relatedRules.length > 0 ? relatedRules : [fallbackRule]
-    };
-  });
+  return normalized.map((finding) => normalizeFindingForSelectedRevixScope({
+    finding,
+    reviewerId: reviewer.reviewer_id,
+    context: selection.scope_context
+  }));
 }
 
 export function createCommandModelRunner({ command = DEFAULT_EVAL_COMMAND, timeoutMs = DEFAULT_EVAL_TIMEOUT_MS } = {}) {
@@ -558,6 +549,58 @@ function normalizeModelFinding({ finding, reviewer, evalCase, index }) {
     related_quality_rules: normalizeRuleIds(finding.related_quality_rules, category),
     tags: normalizeTags(finding.tags, category)
   };
+}
+
+function normalizeFindingForSelectedRevixScope({ finding, reviewerId, context }) {
+  const allowedTags = Array.isArray(context?.allowed_tags) ? context.allowed_tags : [];
+  const allowedRules = Array.isArray(context?.allowed_quality_rules) ? context.allowed_quality_rules : [];
+  const qualityRules = Array.isArray(context?.quality_rules) ? context.quality_rules : [];
+  const rulesById = new Map(qualityRules.filter((rule) => rule?.enabled !== false).map((rule) => [rule.id, rule]));
+  const validAllowedRules = allowedRules.filter((ruleId) => rulesById.has(ruleId));
+  const fallbackTag = allowedTags[0] ?? reviewerId;
+  const fallbackRule = validAllowedRules[0] ?? allowedRules[0] ?? `${fallbackTag}.benchmark_signal`;
+  const tags = finding.tags.filter((tag) => allowedTags.includes(tag));
+  const relatedRules = finding.related_quality_rules.filter((ruleId) => validAllowedRules.includes(ruleId));
+  const normalized = {
+    ...finding,
+    reviewer_id: reviewerId,
+    tags: tags.length > 0 ? tags : [fallbackTag],
+    related_quality_rules: relatedRules.length > 0 ? relatedRules : [fallbackRule],
+    evidence: normalizeEvalEvidenceRange(finding.evidence)
+  };
+  let severity = normalized.severity;
+  let confidence = normalized.confidence;
+
+  if (severity === "QUESTION" && !isClarificationQuestionFinding(normalized)) {
+    severity = "MINOR";
+  }
+  if (severity === "BLOCKER") {
+    const hasHardRule = normalized.related_quality_rules.some((ruleId) => rulesById.get(ruleId)?.kind === "hard");
+    if (confidence !== "HIGH" || !hasHardRule) severity = "MAJOR";
+  }
+  if (severity === "MAJOR" && confidence === "LOW") {
+    confidence = "MEDIUM";
+  }
+
+  return {
+    ...normalized,
+    severity,
+    confidence
+  };
+}
+
+function normalizeEvalEvidenceRange(evidence) {
+  const lineStart = normalizePositiveInteger(evidence?.line_start);
+  const lineEnd = normalizePositiveInteger(evidence?.line_end ?? lineStart);
+  return {
+    ...evidence,
+    line_start: lineStart,
+    line_end: Math.max(lineStart, lineEnd)
+  };
+}
+
+function isClarificationQuestionFinding(finding) {
+  return finding.claim.includes("?") || finding.tags.includes("question") || finding.tags.includes("needs-clarification");
 }
 
 function normalizeModelEvidence(evidence, evalCase) {
