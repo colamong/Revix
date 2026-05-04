@@ -360,7 +360,23 @@ async function runRevixEvalProfile({ evalCase, modelRunner, cacheDir, projectRoo
     finalDecision,
     format: "github-comment"
   });
-  return deepFreeze({ reviewerRun, conflicts, synthesisOptions, finalDecision, output });
+  return deepFreeze({
+    reviewerRun,
+    conflicts,
+    synthesisOptions,
+    finalDecision,
+    output,
+    diagnostic: {
+      reviewer_runs: selectedReviewers.map((selected) => {
+        const result = reviewerRun.results.find((item) => item.reviewer_id === selected.reviewer_id);
+        return {
+          reviewer_id: selected.reviewer_id,
+          finding_count: result?.findings.length ?? 0,
+          allowed_tags: selected.scope_context.allowed_tags
+        };
+      })
+    }
+  });
 }
 
 async function runStyleEvalProfile({ evalCase, reviewer, modelRunner, cacheDir }) {
@@ -372,7 +388,14 @@ async function runStyleEvalProfile({ evalCase, reviewer, modelRunner, cacheDir }
     reviewerRun: { findings },
     synthesisOptions: [],
     finalDecision: { verdict: verdictForFindings(findings) },
-    output: { markdown: raw }
+    output: { markdown: raw },
+    diagnostic: {
+      reviewer_runs: [{
+        reviewer_id: reviewer,
+        finding_count: findings.length,
+        allowed_tags: [reviewer]
+      }]
+    }
   });
 }
 
