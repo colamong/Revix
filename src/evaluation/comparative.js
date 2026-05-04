@@ -21,7 +21,8 @@ import {
 } from "./index.js";
 
 export const COMPARATIVE_REVIEWERS = Object.freeze(["revix", "gstack", "greptile", "coderabbit"]);
-export const DEFAULT_EVAL_COMMAND = "claude -p --tools \"\" --permission-mode plan --output-format json";
+export const DEFAULT_EVAL_COMMAND = "node scripts/codex-eval-runner.mjs";
+export const DEFAULT_EVAL_TIMEOUT_MS = 300000;
 
 const STYLE_PROFILES = Object.freeze({
   gstack: Object.freeze({
@@ -221,7 +222,7 @@ export function normalizeRevixModelFindings({ parsed, reviewer, selection, evalC
   });
 }
 
-export function createCommandModelRunner({ command = DEFAULT_EVAL_COMMAND, timeoutMs = 120000 } = {}) {
+export function createCommandModelRunner({ command = DEFAULT_EVAL_COMMAND, timeoutMs = DEFAULT_EVAL_TIMEOUT_MS } = {}) {
   const runner = async (prompt) => new Promise((resolve, reject) => {
     let settled = false;
     let stdout = "";
@@ -330,7 +331,7 @@ export async function preflightModelRunner({ modelRunner, command = modelRunner?
   }
 }
 
-export async function preflightCommandModelRunner({ command = DEFAULT_EVAL_COMMAND, timeoutMs = 120000 } = {}) {
+export async function preflightCommandModelRunner({ command = DEFAULT_EVAL_COMMAND, timeoutMs = DEFAULT_EVAL_TIMEOUT_MS } = {}) {
   const modelRunner = createCommandModelRunner({ command, timeoutMs });
   const result = await preflightModelRunner({ modelRunner, command });
   return deepFreeze({ ...result, modelRunner });
@@ -352,7 +353,7 @@ export function buildComparativeReport(results) {
         name: reviewerError.name ?? "ReviewerRunError",
         message: reviewerError.message ?? `reviewer failed: ${reviewerError.reviewerId ?? "unknown"}`,
         reviewer_id: reviewerError.reviewerId,
-        cause: reviewerError.cause
+        cause: serializeErrorCause(reviewerError.cause)
       });
     }
     byReviewer.set(result.reviewer, entry);

@@ -15,6 +15,7 @@ import {
   buildComparativeReport,
   countComparativeReportErrors,
   createCommandModelRunner,
+  DEFAULT_EVAL_COMMAND,
   preflightModelRunner,
   renderComparativeMarkdown
 } from "../src/evaluation/comparative.js";
@@ -267,6 +268,10 @@ test("comparative report surfaces per-reviewer run errors", async () => {
   assert.equal(report.reviewers.revix.errors.length, 1);
   assert.equal(report.reviewers.revix.errors[0].reviewer_id, "security");
   assert.equal(report.reviewers.revix.errors[0].cause.code, "EPERM");
+});
+
+test("comparative eval defaults to the Codex eval runner", () => {
+  assert.equal(DEFAULT_EVAL_COMMAND, "node scripts/codex-eval-runner.mjs");
 });
 
 test("command runner wraps launch failures with structured details", async () => {

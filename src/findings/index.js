@@ -26,6 +26,13 @@ export class FindingValidationError extends Error {
     super(message);
     this.name = "FindingValidationError";
   }
+
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message
+    };
+  }
 }
 
 export function validateFindings(findings, context) {

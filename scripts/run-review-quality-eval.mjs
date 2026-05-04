@@ -14,13 +14,14 @@ const reviewers = args.reviewers ?? "revix,gstack,greptile,coderabbit";
 const outDir = args.out ?? "eval-data/reports/latest";
 const limit = args.limit ? Number.parseInt(args.limit, 10) : undefined;
 const command = args.command ?? DEFAULT_EVAL_COMMAND;
+const timeoutMs = args["timeout-ms"] ? Number.parseInt(args["timeout-ms"], 10) : undefined;
 const diagnostic = Boolean(args.diagnostic);
 const allowErrors = Boolean(args["allow-errors"]);
 const preflight = !Boolean(args["no-preflight"]);
 
 try {
   const cases = JSON.parse(await readFile(casesPath, "utf8"));
-  const modelRunner = createCommandModelRunner({ command });
+  const modelRunner = createCommandModelRunner({ command, timeoutMs });
 
   if (preflight) {
     await preflightModelRunner({ modelRunner, command });

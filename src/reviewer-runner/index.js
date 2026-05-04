@@ -7,6 +7,20 @@ export class ReviewerRunError extends Error {
     this.reviewerId = reviewerId;
     this.cause = cause;
   }
+
+  toJSON() {
+    return {
+      name: this.name,
+      message: this.message,
+      reviewerId: this.reviewerId,
+      cause: this.cause ? {
+        name: this.cause.name,
+        message: this.cause.message,
+        code: this.cause.code,
+        details: this.cause.details
+      } : undefined
+    };
+  }
 }
 
 export async function runSelectedReviewers({ prInput, classification, selectedReviewers, runner, continueOnError = false }) {
