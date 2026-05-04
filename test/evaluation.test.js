@@ -7,6 +7,7 @@ import {
   matchScore,
   renderReviewQualityReport
 } from "../src/evaluation/index.js";
+import { buildComparativeReport } from "../src/evaluation/comparative.js";
 
 test("matches exact, near-line, and root-cause equivalent findings", async () => {
   const exact = await matchScore(expectedIssue(), finding());
@@ -140,7 +141,7 @@ test("awards partial category credit when file+line match but category differs",
   assert.ok(score.total > 0.8);
 });
 
-test("matches semantically equivalent claims with cosine similarity", async () => {
+test("matches equivalent claims with token overlap", async () => {
   const score = await matchScore(
     expectedIssue({
       claim: "The raw token is logged and can expose credentials.",
@@ -152,6 +153,45 @@ test("matches semantically equivalent claims with cosine similarity", async () =
   );
 
   assert.ok(score.details.claim >= 0.6);
+});
+
+test("excludes non-applicable skipped-only cases from suite sub-score averages", async () => {
+  const skippedOnly = await evaluateReviewQuality({
+    evalCase: evalCase({
+      eval_id: "skipped-only",
+      expected_issues: [
+        expectedIssue({
+          issue_id: "expected-low",
+          category: "docs",
+          severity: "MINOR",
+          claim: "```suggestion Rename this title. ```",
+          file_path: "CHANGELOG.md",
+          line_start: 1,
+          line_end: 1,
+          matchability: "low"
+        })
+      ]
+    }),
+    reviewResult: reviewResult({ findings: [] })
+  });
+  const missedMatchable = await evaluateReviewQuality({
+    evalCase: evalCase({
+      eval_id: "missed-matchable",
+      expected_issues: [expectedIssue({ matchability: "high" })]
+    }),
+    reviewResult: reviewResult({ findings: [] })
+  });
+  const suite = evaluateReviewQualitySuite([skippedOnly, missedMatchable]);
+
+  assert.equal(skippedOnly.metric_applicability.detection, false);
+  assert.equal(missedMatchable.metric_applicability.detection, true);
+  assert.equal(suite.sub_scores.detection, 0);
+  assert.equal(suite.precision_recall_f1.precision, 0);
+  assert.equal(suite.precision_recall_f1.recall, 0);
+  assert.equal(suite.precision_recall_f1.f1, 0);
+  assert.equal(suite.sub_scores.evidence, 0);
+  assert.equal(suite.sub_scores.severity, 0);
+  assert.equal(suite.sub_scores.actionability, 0);
 });
 
 test("excludes low-matchability issues from RQS denominator", async () => {
@@ -190,6 +230,33 @@ test("includes category_breakdown in JSON report output", async () => {
   assert.equal(evaluation.category_breakdown.correctness.expected, 1);
   assert.equal(evaluation.category_breakdown.correctness.matched, 1);
   assert.ok("security" in evaluation.category_breakdown);
+});
+
+test("comparative report surfaces per-reviewer run errors", async () => {
+  const evaluation = await evaluateReviewQuality({
+    evalCase: evalCase(),
+    reviewResult: { reviewerRun: { findings: [] }, finalDecision: { verdict: "APPROVE" } }
+  });
+  const report = buildComparativeReport([{
+    reviewer: "revix",
+    eval_id: "eval-security",
+    evaluation,
+    error: null,
+    reviewResult: {
+      reviewerRun: {
+        errors: [{
+          name: "ReviewerRunError",
+          message: "reviewer failed: security",
+          reviewerId: "security",
+          cause: { code: "EPERM" }
+        }]
+      }
+    }
+  }]);
+
+  assert.equal(report.reviewers.revix.errors.length, 1);
+  assert.equal(report.reviewers.revix.errors[0].reviewer_id, "security");
+  assert.equal(report.reviewers.revix.errors[0].cause.code, "EPERM");
 });
 
 function smokeEvalCases() {

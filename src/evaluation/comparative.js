@@ -259,6 +259,15 @@ export function buildComparativeReport(results) {
     const entry = byReviewer.get(result.reviewer) ?? { evaluations: [], errors: [] };
     if (result.evaluation) entry.evaluations.push(result.evaluation);
     if (result.error) entry.errors.push({ eval_id: result.eval_id, ...result.error });
+    for (const reviewerError of result.reviewResult?.reviewerRun?.errors ?? []) {
+      entry.errors.push({
+        eval_id: result.eval_id,
+        name: reviewerError.name ?? "ReviewerRunError",
+        message: reviewerError.message ?? `reviewer failed: ${reviewerError.reviewerId ?? "unknown"}`,
+        reviewer_id: reviewerError.reviewerId,
+        cause: reviewerError.cause
+      });
+    }
     byReviewer.set(result.reviewer, entry);
   }
   const reviewers = {};

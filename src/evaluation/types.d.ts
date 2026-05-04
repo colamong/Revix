@@ -37,6 +37,7 @@ export interface ReviewQualityEvaluation {
   eval_id: string;
   rqs: number;
   sub_scores: ReviewQualitySubScores;
+  metric_applicability: Record<keyof ReviewQualitySubScores, boolean>;
   precision_recall_f1: { precision: number; recall: number; f1: number };
   category_recall: Record<string, number>;
   category_breakdown: Record<string, { expected: number; matched: number; recall: number; avg_rqs: number }>;

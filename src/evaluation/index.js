@@ -20,12 +20,7 @@ const BLOCKING_VERDICTS = new Set(["REQUEST_CHANGES", "BLOCK"]);
 const BLOCKING_SEVERITIES = new Set(["MAJOR", "BLOCKER"]);
 const LINE_LEVEL_MATCH_THRESHOLD = 0.45;
 const FILE_LEVEL_MATCH_THRESHOLD = 0.30;
-const SEMANTIC_CLAIM_THRESHOLD = 0.60;
 const BREAKDOWN_CATEGORIES = Object.freeze(["correctness", "security", "contract", "test", "docs", "performance"]);
-const embeddingCache = new Map();
-let embedderPromise = null;
-let embeddingUnavailable = false;
-let embeddingWarningPrinted = false;
 const CATEGORY_WEIGHTS = Object.freeze({
   security: 2,
   privacy: 2,
@@ -74,6 +69,7 @@ export async function evaluateReviewQuality({ evalCase, reviewResult }) {
     eval_id: evalCase.eval_id,
     rqs,
     sub_scores: subScores,
+    metric_applicability: metricApplicability({ matchableExpectedIssues, matchableMatches, matchableFindings }),
     precision_recall_f1: precisionRecallF1(detection, precision),
     category_recall: categoryRecall,
     category_breakdown: categoryBreakdown,
@@ -92,13 +88,17 @@ export function evaluateReviewQualitySuite(results) {
     throw new ReviewQualityEvaluationError("results must be an array");
   }
   const cases = results.map((item) => item.evaluation ?? item);
-  const average = (field) => round(cases.reduce((sum, item) => sum + item.sub_scores[field], 0) / Math.max(cases.length, 1));
+  const average = (field) => {
+    const applicable = cases.filter((item) => metricApplies(item, field));
+    if (applicable.length === 0) return 0;
+    return round(applicable.reduce((sum, item) => sum + item.sub_scores[field], 0) / applicable.length);
+  };
   const subScores = Object.fromEntries(Object.keys(RQS_WEIGHTS).map((field) => [field, average(field)]));
   const totalExpected = cases.reduce((sum, item) => sum + item.matches.filter((match) => !isLowMatchabilityIssue(match.expected_issue)).length + item.missed_issues.length, 0);
   const totalMatched = cases.reduce((sum, item) => sum + item.matches.filter((match) => !isLowMatchabilityIssue(match.expected_issue) && match.matched).length, 0);
   const totalFindings = cases.reduce((sum, item) => sum + item.matches.filter((match) => !isLowMatchabilityIssue(match.expected_issue) && match.matched).length + item.false_positives.length, 0);
   const recall = totalExpected === 0 ? 100 : round((totalMatched / totalExpected) * 100);
-  const precision = totalFindings === 0 ? 100 : round((totalMatched / totalFindings) * 100);
+  const precision = totalFindings === 0 ? (totalExpected === 0 ? 100 : 0) : round((totalMatched / totalFindings) * 100);
   const f1 = precision + recall === 0 ? 0 : round((2 * precision * recall) / (precision + recall));
 
   return deepFreeze({
@@ -294,6 +294,37 @@ function precisionRecallF1(detection, precision) {
   return { precision, recall, f1 };
 }
 
+function metricApplicability({ matchableExpectedIssues, matchableMatches, matchableFindings }) {
+  const hasExpected = matchableExpectedIssues.length > 0;
+  const hasFindings = matchableFindings.length > 0;
+  const hasMatchedFindings = matchableMatches.some((match) => match.matched);
+  return Object.freeze({
+    detection: hasExpected,
+    precision: hasExpected || hasFindings,
+    evidence: hasExpected,
+    severity: hasExpected,
+    actionability: hasMatchedFindings,
+    decision: true,
+    noise: true
+  });
+}
+
+function metricApplies(evaluation, field) {
+  if (evaluation.metric_applicability && field in evaluation.metric_applicability) {
+    return evaluation.metric_applicability[field];
+  }
+  if (["detection", "evidence", "severity"].includes(field)) {
+    return evaluation.matches.some((match) => !isLowMatchabilityIssue(match.expected_issue));
+  }
+  if (field === "precision") {
+    return evaluation.matches.some((match) => !isLowMatchabilityIssue(match.expected_issue)) || evaluation.false_positives.length > 0;
+  }
+  if (field === "actionability") {
+    return evaluation.matches.some((match) => !isLowMatchabilityIssue(match.expected_issue) && match.matched);
+  }
+  return true;
+}
+
 function categoryRecallFor(expectedIssues, matches) {
   const categories = new Map();
   for (const issue of expectedIssues) {
@@ -417,90 +448,12 @@ async function claimMatchScore(issue, finding) {
   const findingText = `${finding.claim} ${finding.impact} ${finding.suggested_fix}`.toLowerCase();
   let best = 0;
   for (const claim of issueClaims) {
-    best = Math.max(best, await claimSimilarity(claim.toLowerCase(), findingText));
+    best = Math.max(best, tokenOverlap(claim.toLowerCase(), findingText));
   }
   if (issue.root_cause) {
-    best = Math.max(best, await claimSimilarity(issue.root_cause.toLowerCase(), findingText));
+    best = Math.max(best, tokenOverlap(issue.root_cause.toLowerCase(), findingText));
   }
   return best;
-}
-
-async function claimSimilarity(left, right) {
-  const semantic = await semanticClaimSimilarity(left, right);
-  if (semantic !== null) return semantic >= SEMANTIC_CLAIM_THRESHOLD ? semantic : 0;
-  return tokenOverlap(left, right);
-}
-
-async function semanticClaimSimilarity(left, right) {
-  const [leftEmbedding, rightEmbedding] = await Promise.all([embedText(left), embedText(right)]);
-  if (!leftEmbedding || !rightEmbedding) return null;
-  return cosineSimilarity(leftEmbedding, rightEmbedding);
-}
-
-async function embedText(value) {
-  const text = String(value ?? "").trim();
-  if (text === "") return null;
-  if (embeddingCache.has(text)) return embeddingCache.get(text);
-  const embedder = await loadEmbedder();
-  if (!embedder) return null;
-  try {
-    const output = await embedder(text, { pooling: "mean", normalize: true });
-    const vector = embeddingVector(output);
-    if (!vector) return null;
-    embeddingCache.set(text, vector);
-    return vector;
-  } catch (error) {
-    warnEmbeddingFallback(error);
-    embeddingUnavailable = true;
-    return null;
-  }
-}
-
-async function loadEmbedder() {
-  if (embeddingUnavailable) return null;
-  if (!embedderPromise) {
-    embedderPromise = import("@xenova/transformers")
-      .then(({ pipeline }) => pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2"))
-      .catch((error) => {
-        warnEmbeddingFallback(error);
-        embeddingUnavailable = true;
-        return null;
-      });
-  }
-  return embedderPromise;
-}
-
-function embeddingVector(output) {
-  if (!output) return null;
-  if (output.data && typeof output.data.length === "number") return Array.from(output.data);
-  if (typeof output.tolist === "function") {
-    const listed = output.tolist();
-    if (Array.isArray(listed?.[0])) return listed[0];
-    if (Array.isArray(listed)) return listed;
-  }
-  if (Array.isArray(output)) return output;
-  return null;
-}
-
-function warnEmbeddingFallback(error) {
-  if (embeddingWarningPrinted) return;
-  embeddingWarningPrinted = true;
-  console.warn(`Revix semantic claim matching unavailable; falling back to token overlap: ${error.message}`);
-}
-
-function cosineSimilarity(left, right) {
-  const length = Math.min(left.length, right.length);
-  if (length === 0) return 0;
-  let dot = 0;
-  let leftMagnitude = 0;
-  let rightMagnitude = 0;
-  for (let index = 0; index < length; index += 1) {
-    dot += left[index] * right[index];
-    leftMagnitude += left[index] * left[index];
-    rightMagnitude += right[index] * right[index];
-  }
-  if (leftMagnitude === 0 || rightMagnitude === 0) return 0;
-  return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
 }
 
 function categoryMatchScore(issue, finding, { fileScore = 0, lineScore = 0 } = {}) {
