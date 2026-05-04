@@ -54,10 +54,11 @@ const STYLE_PROFILES = Object.freeze({
 });
 
 export class ComparativeEvaluationError extends Error {
-  constructor(message, { cause } = {}) {
+  constructor(message, { cause, details } = {}) {
     super(message);
     this.name = "ComparativeEvaluationError";
     this.cause = cause;
+    if (details) this.details = details;
   }
 }
 
@@ -120,7 +121,9 @@ export async function evaluateReviewerOnCase({ evalCase, reviewer, modelRunner, 
       evaluation: null,
       error: {
         name: error.name ?? "Error",
-        message: error.message
+        message: error.message,
+        details: error.details,
+        cause: serializeErrorCause(error.cause)
       }
     });
   }
@@ -219,17 +222,35 @@ export function normalizeRevixModelFindings({ parsed, reviewer, selection, evalC
 }
 
 export function createCommandModelRunner({ command = DEFAULT_EVAL_COMMAND, timeoutMs = 120000 } = {}) {
-  return async (prompt) => new Promise((resolve, reject) => {
-    const child = spawn(command, {
-      shell: true,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true
-    });
+  const runner = async (prompt) => new Promise((resolve, reject) => {
+    let settled = false;
     let stdout = "";
     let stderr = "";
+    let child;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback(value);
+    };
+    try {
+      child = spawn(command, {
+        shell: true,
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true
+      });
+    } catch (error) {
+      reject(commandLaunchError({ command, error }));
+      return;
+    }
     const timeout = setTimeout(() => {
       child.kill();
-      reject(new ComparativeEvaluationError(`model command timed out after ${timeoutMs}ms`));
+      finish(reject, new ComparativeEvaluationError(`model command timed out after ${timeoutMs}ms: ${command}`, {
+        details: {
+          command,
+          timeoutMs
+        }
+      }));
     }, timeoutMs);
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
@@ -238,19 +259,85 @@ export function createCommandModelRunner({ command = DEFAULT_EVAL_COMMAND, timeo
       stderr += chunk.toString();
     });
     child.on("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
+      finish(reject, commandLaunchError({ command, error }));
     });
-    child.on("close", (code) => {
-      clearTimeout(timeout);
+    child.on("close", (code, signal) => {
+      if (settled) return;
       if (code === 0) {
-        resolve(stdout);
+        finish(resolve, stdout);
       } else {
-        reject(new ComparativeEvaluationError(`model command exited ${code}: ${stderr.trim()}`));
+        finish(reject, new ComparativeEvaluationError(`model command exited with code ${code}: ${command}: ${summarizeText(stderr || stdout)}`, {
+          details: {
+            command,
+            code,
+            signal,
+            stderr: summarizeText(stderr, 2000),
+            stdout: summarizeText(stdout, 2000)
+          }
+        }));
       }
     });
-    child.stdin.end(prompt);
+    child.stdin.on("error", (error) => {
+      finish(reject, new ComparativeEvaluationError(`model command stdin failed: ${command}: ${error.message}`, {
+        cause: error,
+        details: commandErrorDetails({ command, error })
+      }));
+    });
+    try {
+      child.stdin.end(prompt);
+    } catch (error) {
+      finish(reject, new ComparativeEvaluationError(`model command stdin failed: ${command}: ${error.message}`, {
+        cause: error,
+        details: commandErrorDetails({ command, error })
+      }));
+    }
   });
+  Object.defineProperties(runner, {
+    command: { value: command },
+    timeoutMs: { value: timeoutMs }
+  });
+  return runner;
+}
+
+export async function preflightModelRunner({ modelRunner, command = modelRunner?.command ?? DEFAULT_EVAL_COMMAND } = {}) {
+  if (typeof modelRunner !== "function") {
+    throw new ComparativeEvaluationError("model runner preflight requires a modelRunner function", {
+      details: { command }
+    });
+  }
+  try {
+    const raw = await modelRunner(renderPrompt(preflightPrompt()));
+    const parsed = parseModelJson(raw);
+    const findings = Array.isArray(parsed) ? parsed : parsed?.findings;
+    if (!Array.isArray(findings)) {
+      throw new ComparativeEvaluationError("model preflight JSON must contain a findings array", {
+        details: { command }
+      });
+    }
+    return deepFreeze({
+      ok: true,
+      command,
+      parsed
+    });
+  } catch (error) {
+    throw new ComparativeEvaluationError(`model command preflight failed: ${error.message}`, {
+      cause: error,
+      details: {
+        command,
+        ...error.details
+      }
+    });
+  }
+}
+
+export async function preflightCommandModelRunner({ command = DEFAULT_EVAL_COMMAND, timeoutMs = 120000 } = {}) {
+  const modelRunner = createCommandModelRunner({ command, timeoutMs });
+  const result = await preflightModelRunner({ modelRunner, command });
+  return deepFreeze({ ...result, modelRunner });
+}
+
+export function countComparativeReportErrors(report) {
+  return Object.values(report?.reviewers ?? {}).reduce((sum, reviewer) => sum + (reviewer.errors?.length ?? 0), 0);
 }
 
 export function buildComparativeReport(results) {
@@ -297,10 +384,15 @@ export async function writeComparativeReport({ outDir, results, report }) {
 
 export function renderComparativeMarkdown(report) {
   const lines = [];
+  const errorCount = countComparativeReportErrors(report);
   lines.push("# Revix RQS Comparative Evaluation");
   lines.push("");
   lines.push("This is a local rubric recreation benchmark, not an official Greptile or CodeRabbit product result.");
   lines.push("");
+  if (errorCount > 0) {
+    lines.push(`> Eval run invalid/incomplete: ${errorCount} reviewer/model error(s). Treat scores and category matches as unreliable until runner errors are resolved.`);
+    lines.push("");
+  }
   lines.push("| Reviewer | RQS | Detection | Precision | Evidence | Severity | Actionability | Decision | Noise | Errors |");
   lines.push("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
   for (const [reviewer, item] of Object.entries(report.reviewers)) {
@@ -309,6 +401,10 @@ export function renderComparativeMarkdown(report) {
   lines.push("");
   lines.push("## Category Breakdown");
   lines.push("");
+  if (errorCount > 0) {
+    lines.push("Category matched counts may be zero because reviewer execution failed, not because reviewers completed normally with no findings.");
+    lines.push("");
+  }
   lines.push("| Reviewer | Category | Expected | Matched | Recall | Avg RQS |");
   lines.push("| --- | --- | ---: | ---: | ---: | ---: |");
   for (const [reviewer, item] of Object.entries(report.reviewers)) {
@@ -516,6 +612,17 @@ function renderPrompt(prompt) {
   return JSON.stringify(prompt, null, 2);
 }
 
+function preflightPrompt() {
+  return {
+    task: "revix_eval_runner_preflight",
+    instructions: [
+      "Return JSON only.",
+      "Use exactly this shape: {\"findings\":[]}.",
+      "Do not inspect a repository or perform review work for this preflight."
+    ]
+  };
+}
+
 function renderRepairPrompt(raw, error) {
   return JSON.stringify({
     task: "repair_review_findings_json",
@@ -707,6 +814,44 @@ function addCandidate(candidates, metric, revixScore, best) {
       gap
     });
   }
+}
+
+function commandLaunchError({ command, error }) {
+  return new ComparativeEvaluationError(`model command could not be launched: ${command}: ${error.message}`, {
+    cause: error,
+    details: commandErrorDetails({ command, error })
+  });
+}
+
+function commandErrorDetails({ command, error }) {
+  return {
+    command,
+    code: error?.code,
+    errno: error?.errno,
+    syscall: error?.syscall,
+    path: error?.path,
+    spawnargs: error?.spawnargs
+  };
+}
+
+function serializeErrorCause(error) {
+  if (!error) return undefined;
+  return {
+    name: error.name,
+    message: error.message,
+    code: error.code,
+    errno: error.errno,
+    syscall: error.syscall,
+    path: error.path,
+    spawnargs: error.spawnargs,
+    details: error.details
+  };
+}
+
+function summarizeText(value, maxLength = 500) {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 3)}...`;
 }
 
 function deepFreeze(value) {

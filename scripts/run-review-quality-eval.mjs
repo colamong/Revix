@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { runComparativeReviewQualityEval, DEFAULT_EVAL_COMMAND } from "../src/evaluation/comparative.js";
+import {
+  countComparativeReportErrors,
+  createCommandModelRunner,
+  DEFAULT_EVAL_COMMAND,
+  preflightModelRunner,
+  runComparativeReviewQualityEval
+} from "../src/evaluation/comparative.js";
 
 const args = parseArgs(process.argv.slice(2));
 const casesPath = args.cases ?? "eval-data/swe-prbench/converted/eval-cases.json";
@@ -9,26 +15,46 @@ const outDir = args.out ?? "eval-data/reports/latest";
 const limit = args.limit ? Number.parseInt(args.limit, 10) : undefined;
 const command = args.command ?? DEFAULT_EVAL_COMMAND;
 const diagnostic = Boolean(args.diagnostic);
+const allowErrors = Boolean(args["allow-errors"]);
+const preflight = !Boolean(args["no-preflight"]);
 
-const cases = JSON.parse(await readFile(casesPath, "utf8"));
-const { results, report } = await runComparativeReviewQualityEval({
-  cases,
-  reviewers,
-  limit,
-  outDir,
-  command
-});
+try {
+  const cases = JSON.parse(await readFile(casesPath, "utf8"));
+  const modelRunner = createCommandModelRunner({ command });
 
-console.log(`RQS comparative eval complete: ${report.case_count} cases, ${report.reviewer_count} reviewers.`);
-for (const [reviewer, item] of Object.entries(report.reviewers)) {
-  console.log(`${reviewer}: RQS ${item.rqs}, detection ${item.sub_scores.detection}, precision ${item.sub_scores.precision}, errors ${item.errors.length}`);
-}
-if (diagnostic) {
-  for (const line of diagnosticLines(report, results)) {
-    console.log(line);
+  if (preflight) {
+    await preflightModelRunner({ modelRunner, command });
   }
+
+  const { results, report } = await runComparativeReviewQualityEval({
+    cases,
+    reviewers,
+    limit,
+    outDir,
+    command,
+    modelRunner
+  });
+
+  console.log(`RQS comparative eval complete: ${report.case_count} cases, ${report.reviewer_count} reviewers.`);
+  for (const [reviewer, item] of Object.entries(report.reviewers)) {
+    console.log(`${reviewer}: RQS ${item.rqs}, detection ${item.sub_scores.detection}, precision ${item.sub_scores.precision}, errors ${item.errors.length}`);
+  }
+  if (diagnostic) {
+    for (const line of diagnosticLines(report, results)) {
+      console.log(line);
+    }
+  }
+  console.log(`Report: ${outDir}/summary.md`);
+
+  const errorCount = countComparativeReportErrors(report);
+  if (errorCount > 0 && !allowErrors) {
+    console.error(`Eval run invalid/incomplete: ${errorCount} reviewer/model error(s). Re-run with --allow-errors to write reports while allowing exit code 0.`);
+    process.exitCode = 1;
+  }
+} catch (error) {
+  console.error(formatCliError(error));
+  process.exitCode = 1;
 }
-console.log(`Report: ${outDir}/summary.md`);
 
 function parseArgs(argv) {
   const parsed = {};
@@ -117,4 +143,23 @@ function isReviewerInScope(allowedTags = [], expectedCategories = []) {
 
 function normalizeCategory(category) {
   return category === "documentation" ? "docs" : String(category ?? "");
+}
+
+function formatCliError(error) {
+  const lines = [];
+  lines.push(`Eval runner failed: ${error.message}`);
+  const details = error.details ?? error.cause?.details;
+  if (details?.command) lines.push(`command: ${details.command}`);
+  for (const key of ["code", "errno", "syscall", "timeoutMs"]) {
+    if (details?.[key] !== undefined) lines.push(`${key}: ${details[key]}`);
+  }
+  if (details?.stderr) lines.push(`stderr: ${details.stderr}`);
+  if (details?.stdout) lines.push(`stdout: ${details.stdout}`);
+  const cause = error.cause;
+  if (cause && cause !== error) {
+    if (cause.code !== undefined) lines.push(`cause.code: ${cause.code}`);
+    if (cause.errno !== undefined) lines.push(`cause.errno: ${cause.errno}`);
+    if (cause.syscall !== undefined) lines.push(`cause.syscall: ${cause.syscall}`);
+  }
+  return lines.join("\n");
 }

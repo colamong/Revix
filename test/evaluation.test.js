@@ -1,5 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import {
   evaluateReviewQuality,
   evaluateReviewQualitySuite,
@@ -7,7 +11,13 @@ import {
   matchScore,
   renderReviewQualityReport
 } from "../src/evaluation/index.js";
-import { buildComparativeReport } from "../src/evaluation/comparative.js";
+import {
+  buildComparativeReport,
+  countComparativeReportErrors,
+  createCommandModelRunner,
+  preflightModelRunner,
+  renderComparativeMarkdown
+} from "../src/evaluation/comparative.js";
 
 test("matches exact, near-line, and root-cause equivalent findings", async () => {
   const exact = await matchScore(expectedIssue(), finding());
@@ -257,6 +267,140 @@ test("comparative report surfaces per-reviewer run errors", async () => {
   assert.equal(report.reviewers.revix.errors.length, 1);
   assert.equal(report.reviewers.revix.errors[0].reviewer_id, "security");
   assert.equal(report.reviewers.revix.errors[0].cause.code, "EPERM");
+});
+
+test("command runner wraps launch failures with structured details", async () => {
+  const runner = createCommandModelRunner({
+    command: "definitely-not-a-revix-eval-command",
+    timeoutMs: 1000
+  });
+
+  await assert.rejects(
+    runner("{}"),
+    (error) => {
+      assert.equal(error.name, "ComparativeEvaluationError");
+      assert.match(error.message, /model command/);
+      assert.equal(error.details.command, "definitely-not-a-revix-eval-command");
+      return true;
+    }
+  );
+});
+
+test("preflight fails before cases are evaluated when model output is not JSON", async () => {
+  let evaluated = false;
+
+  await assert.rejects(
+    preflightModelRunner({
+      command: "fixture bad json",
+      modelRunner: async () => {
+        evaluated = true;
+        return "not json";
+      }
+    }),
+    /preflight failed/
+  );
+  assert.equal(evaluated, true);
+});
+
+test("comparative markdown marks reports with runner errors invalid", async () => {
+  const evaluation = await evaluateReviewQuality({
+    evalCase: evalCase(),
+    reviewResult: { reviewerRun: { findings: [] }, finalDecision: { verdict: "APPROVE" } }
+  });
+  const report = buildComparativeReport([{
+    reviewer: "revix",
+    eval_id: "eval-security",
+    evaluation,
+    error: {
+      name: "ComparativeEvaluationError",
+      message: "model command could not be launched",
+      details: { command: "claude -p", code: "EPERM", syscall: "spawn" }
+    },
+    reviewResult: null
+  }]);
+  const markdown = renderComparativeMarkdown(report);
+
+  assert.equal(countComparativeReportErrors(report), 1);
+  assert.match(markdown, /Eval run invalid\/incomplete/);
+  assert.match(markdown, /Category matched counts may be zero/);
+});
+
+test("eval CLI preflight failure exits non-zero without writing a report", async () => {
+  const root = await mkdtemp(join(tmpdir(), "revix-eval-preflight-"));
+  const casesPath = join(root, "cases.json");
+  const outDir = join(root, "out");
+  const runnerPath = join(root, "bad-runner.mjs");
+  await writeFile(casesPath, `${JSON.stringify([evalCase()])}\n`);
+  await writeFile(runnerPath, "process.stdin.resume(); process.stdin.on('end', () => console.log('not json'));\n");
+
+  const result = spawnSync(process.execPath, [
+    "scripts/run-review-quality-eval.mjs",
+    "--cases",
+    casesPath,
+    "--out",
+    outDir,
+    "--limit",
+    "1",
+    "--reviewers",
+    "gstack",
+    "--command",
+    `"${process.execPath}" "${runnerPath}"`
+  ], {
+    cwd: process.cwd(),
+    encoding: "utf8"
+  });
+
+  if (result.error?.code === "EPERM") return;
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /preflight failed/);
+  assert.match(result.stderr, /command:/);
+  await assert.rejects(readFile(join(outDir, "summary.json"), "utf8"), /ENOENT/);
+});
+
+test("eval CLI allow-errors writes invalid report with zero exit", async () => {
+  const root = await mkdtemp(join(tmpdir(), "revix-eval-allow-errors-"));
+  const casesPath = join(root, "cases.json");
+  const outDir = join(root, "out");
+  const runnerPath = join(root, "failing-eval-runner.mjs");
+  await writeFile(casesPath, `${JSON.stringify([evalCase()])}\n`);
+  await writeFile(runnerPath, `
+const chunks = [];
+process.stdin.on('data', (chunk) => chunks.push(chunk));
+process.stdin.on('end', () => {
+  const prompt = Buffer.concat(chunks).toString();
+  if (prompt.includes('revix_eval_runner_preflight')) {
+    console.log(JSON.stringify({ findings: [] }));
+    return;
+  }
+  console.error('fixture eval failed');
+  process.exit(2);
+});
+`);
+
+  const result = spawnSync(process.execPath, [
+    "scripts/run-review-quality-eval.mjs",
+    "--cases",
+    casesPath,
+    "--out",
+    outDir,
+    "--limit",
+    "1",
+    "--reviewers",
+    "gstack",
+    "--allow-errors",
+    "--command",
+    `"${process.execPath}" "${runnerPath}"`
+  ], {
+    cwd: process.cwd(),
+    encoding: "utf8"
+  });
+
+  if (result.error?.code === "EPERM") return;
+  assert.equal(result.status, 0, result.stderr);
+  const summary = JSON.parse(await readFile(join(outDir, "summary.json"), "utf8"));
+  const markdown = await readFile(join(outDir, "summary.md"), "utf8");
+  assert.equal(countComparativeReportErrors(summary), 1);
+  assert.match(markdown, /Eval run invalid\/incomplete/);
 });
 
 function smokeEvalCases() {
