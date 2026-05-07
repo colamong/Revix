@@ -69,6 +69,40 @@ test("conflict with blocking finding escalates at least to REQUEST_CHANGES", () 
 
   assert.ok(["REQUEST_CHANGES", "BLOCK"].includes(decision.verdict));
   assert.deepEqual(decision.conflict_ids, ["conflict-severity_conflict-a-b"]);
+  assert.ok(decision.option_evaluations.some((evaluation) => evaluation.option_id === "option-conflict-conflict-severity_conflict-a-b"));
+});
+
+test("does not select disqualified synthesis options", () => {
+  const qualityRules = loadDefaultConstitution();
+  const findings = [finding("a", { severity: "BLOCKER" }), finding("b", {
+    reviewer_id: "performance",
+    tags: ["performance"],
+    related_quality_rules: ["performance.reasonable_cost"]
+  })];
+  const conflicts = [{
+    conflict_id: "conflict-security_vs_performance-a-b",
+    type: "security_vs_performance",
+    conflict_type: "security_vs_performance",
+    finding_ids: ["a", "b"],
+    involved_findings: ["a", "b"],
+    involved_reviewers: ["performance", "security"],
+    summary: "security versus performance conflict",
+    competing_claims: [],
+    affected_quality_rules: ["security.no_new_risk", "performance.reasonable_cost"],
+    evidence_refs: ["src/auth/session.js:42-44"],
+    required_resolution: "Preserve security before accepting performance cost.",
+    resolution_required: true,
+    confidence: "HIGH"
+  }];
+  const decision = evaluateFinalDecision({
+    qualityRules,
+    findings,
+    conflicts,
+    synthesisOptions: generateSynthesisOptions({ findings, conflicts })
+  });
+
+  assert.ok(!decision.selected_option_ids.includes("option-prefer-b-conflict-security_vs_performance-a-b"));
+  assert.ok(decision.option_evaluations.some((evaluation) => evaluation.disqualified));
 });
 
 function finding(id, overrides = {}) {

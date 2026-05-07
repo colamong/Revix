@@ -70,7 +70,19 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "format": { "enum": ["markdown", "json"] }
+        "format": { "enum": ["markdown", "json", "github-comment"] }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "enum": ["mock", "openai", "anthropic"] },
+        "fixture_dir": { "type": "string" },
+        "model": { "type": "string" },
+        "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
+        "timeout_ms": { "type": "integer", "minimum": 1 },
+        "max_retries": { "type": "integer", "minimum": 0 }
       }
     },
     "verdict": {

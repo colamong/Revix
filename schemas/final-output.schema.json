@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://revix.dev/schemas/final-output.schema.json",
+  "title": "Revix final output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "markdown", "json"],
+  "properties": {
+    "format": { "enum": ["markdown", "json", "github-comment"] },
+    "markdown": { "type": "string" },
+    "json": { "type": "object" }
+  }
+}

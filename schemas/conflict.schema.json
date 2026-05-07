@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://revix.dev/schemas/conflict.schema.json",
+  "title": "Revix review conflict",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["conflict_id", "type", "conflict_type", "involved_reviewers", "involved_findings", "finding_ids", "summary", "competing_claims", "affected_quality_rules", "evidence_refs", "required_resolution", "resolution_required", "confidence"],
+  "properties": {
+    "conflict_id": { "type": "string", "minLength": 1 },
+    "type": { "type": "string", "minLength": 1 },
+    "conflict_type": { "type": "string", "minLength": 1 },
+    "involved_reviewers": { "$ref": "#/$defs/strings" },
+    "involved_findings": { "$ref": "#/$defs/strings" },
+    "finding_ids": { "$ref": "#/$defs/strings" },
+    "summary": { "type": "string", "minLength": 1 },
+    "competing_claims": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "affected_quality_rules": { "$ref": "#/$defs/strings" },
+    "evidence_refs": { "$ref": "#/$defs/strings" },
+    "required_resolution": { "type": "string", "minLength": 1 },
+    "resolution_required": { "type": "boolean" },
+    "confidence": { "enum": ["HIGH", "MEDIUM", "LOW"] }
+  },
+  "$defs": {
+    "strings": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

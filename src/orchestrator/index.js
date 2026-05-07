@@ -2,8 +2,9 @@ import { classifyPr } from "../classification/index.js";
 import { detectConflicts } from "../conflicts/index.js";
 import { loadDefaultConstitution, mergeConstitution } from "../constitution/index.js";
 import { evaluateFinalDecision } from "../decision/index.js";
+import { composeFinalReview } from "../final-composer/index.js";
 import { validatePrInput } from "../pr-input/index.js";
-import { renderGitHubReviewComment } from "../renderers/github-comment/index.js";
+import { createProvider, createProviderReviewerRunner } from "../providers/index.js";
 import { runSelectedReviewers } from "../reviewer-runner/index.js";
 import { selectReviewers } from "../reviewer-selection/index.js";
 import { loadEffectiveReviewerSkills } from "../reviewer-skills/index.js";
@@ -22,12 +23,18 @@ export async function runRevixReview(input, options = {}) {
   const projectRoot = options.projectRoot ?? process.cwd();
   const config = options.config ?? loadRevixConfig(projectRoot);
   const qualityRules = options.qualityRules ?? loadQualityRules(projectRoot, config);
-  const runner = options.runner ?? emptyRunner;
   const outputFormat = options.outputFormat ?? config.output.format;
 
   const prInput = validatePrInput(input);
   const classification = classifyPr(prInput, config);
   const skills = options.skills ?? loadEffectiveReviewerSkills(projectRoot, qualityRules);
+  const runner = options.runner ?? createProviderReviewerRunner({
+    provider: options.provider ?? createProvider(config.provider, { projectRoot, fixtureDir: options.fixtureDir }),
+    prInput,
+    classification,
+    qualityRules,
+    config
+  });
   const selectedReviewers = selectReviewers({
     prInput,
     classification,
@@ -53,14 +60,15 @@ export async function runRevixReview(input, options = {}) {
     conflicts,
     synthesisOptions
   });
-  const rendered = renderGitHubReviewComment({
+  const rendered = composeFinalReview({
     prInput,
     classification,
     selectedReviewers,
     findings: reviewerRun.findings,
     conflicts,
     synthesisOptions,
-    finalDecision
+    finalDecision,
+    format: outputFormat === "json" ? "json" : "github-comment"
   });
 
   return Object.freeze({
@@ -83,8 +91,4 @@ function loadQualityRules(projectRoot, config) {
   return mergeConstitution(loadDefaultConstitution(), {
     constitution: config.quality.overrides
   });
-}
-
-function emptyRunner() {
-  return [];
 }

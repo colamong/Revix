@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://revix.dev/schemas/synthesis-option.schema.json",
+  "title": "Revix synthesis option",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["option_id", "strategy", "summary", "description", "finding_ids", "conflict_ids", "recommended_actions", "required_changes", "satisfied_quality_rules", "weakened_quality_rules", "risk", "implementation_cost", "expected_benefit", "reviewers_likely_to_accept", "reviewers_likely_to_reject", "score_dimensions", "disqualified_reason", "tradeoffs", "confidence"],
+  "properties": {
+    "option_id": { "type": "string", "minLength": 1 },
+    "strategy": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "finding_ids": { "$ref": "#/$defs/strings" },
+    "conflict_ids": { "$ref": "#/$defs/strings" },
+    "recommended_actions": { "$ref": "#/$defs/strings" },
+    "required_changes": { "$ref": "#/$defs/strings" },
+    "satisfied_quality_rules": { "$ref": "#/$defs/strings" },
+    "weakened_quality_rules": { "$ref": "#/$defs/strings" },
+    "risk": { "enum": ["low", "medium", "high", "disqualified"] },
+    "implementation_cost": { "type": "integer", "minimum": 0, "maximum": 5 },
+    "expected_benefit": { "type": "string", "minLength": 1 },
+    "reviewers_likely_to_accept": { "$ref": "#/$defs/strings" },
+    "reviewers_likely_to_reject": { "$ref": "#/$defs/strings" },
+    "score_dimensions": { "type": "object" },
+    "disqualified_reason": { "type": ["string", "null"] },
+    "tradeoffs": { "$ref": "#/$defs/strings" },
+    "confidence": { "enum": ["HIGH", "MEDIUM", "LOW"] }
+  },
+  "$defs": {
+    "strings": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}

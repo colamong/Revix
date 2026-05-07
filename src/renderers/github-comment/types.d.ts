@@ -7,7 +7,7 @@ import type { SelectedReviewer } from "../../reviewer-selection/types.d.ts";
 import type { SynthesisOption } from "../../synthesis/types.d.ts";
 
 export interface RenderedReviewComment {
-  format: "markdown";
+  format: "github-comment";
   markdown: string;
   json: object;
 }

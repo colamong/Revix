@@ -11,7 +11,15 @@ export interface RevixConfig {
   selection: { rules: object[] };
   severity: { overrides: Record<string, unknown> };
   labels: { skip: string[]; force_reviewers: Record<string, string[]> };
-  output: { format: "markdown" | "json" };
+  output: { format: "markdown" | "json" | "github-comment" };
+  provider: {
+    name: "mock" | "openai" | "anthropic";
+    fixture_dir: string;
+    model: string;
+    temperature: number;
+    timeout_ms: number;
+    max_retries: number;
+  };
   verdict: { fail_on_request_changes: boolean };
 }
 

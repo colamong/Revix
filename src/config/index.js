@@ -40,6 +40,14 @@ export const DEFAULT_CONFIG = Object.freeze({
   output: Object.freeze({
     format: "markdown"
   }),
+  provider: Object.freeze({
+    name: "mock",
+    fixture_dir: "",
+    model: "",
+    temperature: 0,
+    timeout_ms: 60000,
+    max_retries: 0
+  }),
   verdict: Object.freeze({
     fail_on_request_changes: true
   })
@@ -54,6 +62,7 @@ const TOP_LEVEL_KEYS = Object.freeze([
   "severity",
   "labels",
   "output",
+  "provider",
   "verdict",
   "constitution",
   "reviewer_skills"
@@ -160,11 +169,35 @@ function validateConfig(config) {
     assertString(label, "labels.force_reviewers key");
     assertReviewerIds(reviewerIds, `labels.force_reviewers.${label}`);
   }
-  if (!["markdown", "json"].includes(config.output.format)) {
-    throw new RevixConfigError("output.format must be markdown or json");
+  if (!["markdown", "json", "github-comment"].includes(config.output.format)) {
+    throw new RevixConfigError("output.format must be markdown, json, or github-comment");
   }
+  validateProviderConfig(config.provider);
   if (typeof config.verdict.fail_on_request_changes !== "boolean") {
     throw new RevixConfigError("verdict.fail_on_request_changes must be boolean");
+  }
+}
+
+function validateProviderConfig(provider) {
+  assertObject(provider, "provider");
+  validateExactKeys(provider, ["name", "fixture_dir", "model", "temperature", "timeout_ms", "max_retries"], "provider");
+  if (!["mock", "openai", "anthropic"].includes(provider.name)) {
+    throw new RevixConfigError("provider.name must be mock, openai, or anthropic");
+  }
+  if (typeof provider.fixture_dir !== "string") {
+    throw new RevixConfigError("provider.fixture_dir must be a string");
+  }
+  if (typeof provider.model !== "string") {
+    throw new RevixConfigError("provider.model must be a string");
+  }
+  if (typeof provider.temperature !== "number" || provider.temperature < 0 || provider.temperature > 2) {
+    throw new RevixConfigError("provider.temperature must be a number from 0 to 2");
+  }
+  if (!Number.isInteger(provider.timeout_ms) || provider.timeout_ms < 1) {
+    throw new RevixConfigError("provider.timeout_ms must be a positive integer");
+  }
+  if (!Number.isInteger(provider.max_retries) || provider.max_retries < 0) {
+    throw new RevixConfigError("provider.max_retries must be a non-negative integer");
   }
 }
 
@@ -195,6 +228,7 @@ function cloneConfig(config) {
       force_reviewers: Object.fromEntries(Object.entries(config.labels.force_reviewers).map(([label, reviewerIds]) => [label, [...reviewerIds]]))
     },
     output: { ...config.output },
+    provider: { ...config.provider },
     verdict: { ...config.verdict }
   };
 }

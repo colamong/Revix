@@ -9,6 +9,10 @@ test("returns no conflicts for compatible findings", () => {
 test("detects severity mismatch on same range", () => {
   const conflicts = detectConflicts([finding("a", { severity: "BLOCKER" }), finding("b", { severity: "NIT" })]);
   assert.equal(conflicts[0].type, "severity_conflict");
+  assert.equal(conflicts[0].conflict_type, "severity_mismatch");
+  assert.deepEqual(conflicts[0].involved_findings, ["a", "b"]);
+  assert.deepEqual(conflicts[0].affected_quality_rules, ["security.no_new_risk"]);
+  assert.equal(conflicts[0].confidence, "HIGH");
 });
 
 test("detects incompatible fixes", () => {
@@ -34,6 +38,25 @@ test("detects confidence conflict and stable IDs", () => {
   ]);
   assert.equal(conflicts[0].type, "confidence_conflict");
   assert.equal(conflicts[0].conflict_id, "conflict-confidence_conflict-a-b");
+});
+
+test("detects security versus performance conflicts with competing claims", () => {
+  const conflicts = detectConflicts([
+    finding("a", { reviewer_id: "security", tags: ["security"], related_quality_rules: ["security.no_new_risk"] }),
+    finding("b", {
+      reviewer_id: "performance",
+      tags: ["performance"],
+      related_quality_rules: ["performance.reasonable_cost"],
+      claim: "The repeated call should be cached to reduce avoidable request latency.",
+      suggested_fix: "Keep a short-lived cache for this repeated lookup."
+    })
+  ]);
+
+  assert.equal(conflicts[0].type, "security_vs_performance");
+  assert.equal(conflicts[0].conflict_type, "security_vs_performance");
+  assert.deepEqual(conflicts[0].involved_reviewers, ["performance", "security"]);
+  assert.equal(conflicts[0].competing_claims.length, 2);
+  assert.match(conflicts[0].required_resolution, /preserves security/);
 });
 
 function finding(id, overrides = {}) {

@@ -4,9 +4,14 @@ import { readFileSync } from "node:fs";
 
 const SCHEMAS = [
   "schemas/finding.schema.json",
+  "schemas/conflict.schema.json",
+  "schemas/final-output.schema.json",
   "schemas/pr-input.schema.json",
+  "schemas/review-quality-eval-case.schema.json",
+  "schemas/review-quality-evaluation.schema.json",
   "schemas/reviewer-skill.schema.json",
-  "schemas/revix-config.schema.json"
+  "schemas/revix-config.schema.json",
+  "schemas/synthesis-option.schema.json"
 ];
 
 test("published JSON schemas parse", () => {

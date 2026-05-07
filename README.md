@@ -21,18 +21,31 @@ Run the full deterministic pipeline with a PR input fixture:
 
 ```sh
 npm test
-node bin/revix.js --input test/fixtures/e2e-pr-input.json
+node bin/revix.js check
+node bin/revix.js review --input test/fixtures/e2e-pr-input.json
 ```
 
 For local reviewer-output fixtures, pass structured findings as JSON:
 
 ```sh
 node bin/revix.js \
+  review \
   --input test/fixtures/e2e-pr-input.json \
   --project-root test/fixtures/e2e-project \
   --reviewer-output test/fixtures/e2e-reviewer-output-blocking.json \
-  --format markdown
+  --format github-comment
 ```
 
-The CLI renders Markdown or JSON only. It does not call external AI providers or
+For fixture-backed mock provider runs, put reviewer findings in
+`<fixture-dir>/<reviewer_id>.json` or `<fixture-dir>/findings.json` and run:
+
+```sh
+node bin/revix.js review \
+  --input test/fixtures/e2e-pr-input.json \
+  --mock-fixture-dir test/fixtures/mock-provider \
+  --dry-run
+```
+
+The v0.1 CLI supports `review` and `check`. It renders Markdown, JSON, or a
+GitHub-comment-shaped Markdown body. It does not call external AI providers or
 post comments to GitHub.

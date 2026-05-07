@@ -21,12 +21,14 @@ test("loads default config", () => {
 
 test("merges .revix.yml config fields", () => {
   const projectRoot = mkdtempSync(join(tmpdir(), "revix-config-"));
-  writeFileSync(join(projectRoot, ".revix.yml"), `reviewers:\n  enabled: [security, contract]\npaths:\n  ignored: [dist/**]\nlabels:\n  skip: [no-review]\n  force_reviewers:\n    force-security: [security]\noutput:\n  format: json\nverdict:\n  fail_on_request_changes: false\n`, "utf8");
+  writeFileSync(join(projectRoot, ".revix.yml"), `reviewers:\n  enabled: [security, contract]\npaths:\n  ignored: [dist/**]\nlabels:\n  skip: [no-review]\n  force_reviewers:\n    force-security: [security]\noutput:\n  format: json\nprovider:\n  name: mock\n  fixture_dir: test/fixtures/mock-provider\nverdict:\n  fail_on_request_changes: false\n`, "utf8");
 
   const config = loadRevixConfig(projectRoot);
   assert.deepEqual(config.reviewers.enabled, ["security", "contract"]);
   assert.deepEqual(config.paths.ignored, ["dist/**"]);
   assert.equal(config.output.format, "json");
+  assert.equal(config.provider.name, "mock");
+  assert.equal(config.provider.fixture_dir, "test/fixtures/mock-provider");
   assert.equal(config.verdict.fail_on_request_changes, false);
   assert.deepEqual(forcedReviewersForLabels(config, ["force-security"]), ["security"]);
 });

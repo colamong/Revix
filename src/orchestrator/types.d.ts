@@ -4,6 +4,7 @@ import type { ReviewConflict } from "../conflicts/types.d.ts";
 import type { QualityRule } from "../constitution/types.d.ts";
 import type { FinalDecision } from "../decision/types.d.ts";
 import type { PrInput } from "../pr-input/types.d.ts";
+import type { ReviewProvider } from "../providers/types.d.ts";
 import type { ReviewerRunInput, ReviewerRunResult } from "../reviewer-runner/types.d.ts";
 import type { SelectedReviewer } from "../reviewer-selection/types.d.ts";
 import type { ReviewerSkill } from "../reviewer-skills/types.d.ts";
@@ -18,7 +19,7 @@ export interface RevixReviewResult {
   synthesisOptions: readonly SynthesisOption[];
   finalDecision: FinalDecision;
   output: {
-    format: "markdown" | "json";
+    format: "markdown" | "json" | "github-comment";
     markdown: string;
     json: object;
   };
@@ -33,7 +34,9 @@ export function runRevixReview(input: unknown, options?: {
   config?: RevixConfig;
   qualityRules?: readonly QualityRule[];
   skills?: readonly ReviewerSkill[];
-  outputFormat?: "markdown" | "json";
+  outputFormat?: "markdown" | "json" | "github-comment";
+  provider?: ReviewProvider;
+  fixtureDir?: string;
   continueOnError?: boolean;
   runner?: (input: ReviewerRunInput) => unknown[] | Promise<unknown[]>;
 }): Promise<RevixReviewResult>;

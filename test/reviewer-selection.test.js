@@ -48,9 +48,16 @@ test("selects contract and documentation reviewers for contract and docs paths",
   assert.deepEqual(selectFor(["docs/readme.md"], DEFAULT_CONFIG).map((item) => item.reviewer_id), ["documentation"]);
 });
 
+test("uses full-spec default reviewer mapping", () => {
+  assert.deepEqual(selectFor([".github/workflows/ci.yml"], DEFAULT_CONFIG).map((item) => item.reviewer_id), ["observability", "reliability", "security"]);
+  assert.deepEqual(selectFor(["src/retry/job.js"], DEFAULT_CONFIG).map((item) => item.reviewer_id), ["observability", "reliability", "test"]);
+  const performance = selectFor(["src/query/users.js"], mergeRevixConfig(DEFAULT_CONFIG, { paths: { performance_sensitive: ["src/query/**"] } })).map((item) => item.reviewer_id);
+  assert.deepEqual(performance, ["performance", "reliability", "test"]);
+});
+
 function selectFor(paths, config, labels = []) {
   const prInput = validatePrInput(validPrInput({
-    metadata: { ...validPrInput().metadata, labels },
+    metadata: { ...validPrInput().metadata, title: "Update changed files", labels },
     changed_files: paths.map((path) => ({ path, status: "modified", additions: 1, deletions: 0 })),
     raw_diff: ""
   }));

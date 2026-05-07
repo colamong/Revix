@@ -59,6 +59,13 @@ export function evaluateFinalDecision({ qualityRules, findings = [], conflicts =
     verdict,
     passed: verdict === "APPROVE" || verdict === "COMMENT",
     selected_option_ids: Object.freeze(selectedOptionIds),
+    option_evaluations: Object.freeze(synthesisOptions.map((option) => Object.freeze({
+      option_id: option.option_id,
+      selected: selectedOptionIds.includes(option.option_id),
+      disqualified: Boolean(option.disqualified_reason),
+      disqualified_reason: option.disqualified_reason ?? null,
+      score_dimensions: option.score_dimensions ? Object.freeze({ ...option.score_dimensions }) : null
+    }))),
     blocking_finding_ids: Object.freeze(blockingFindingIds),
     non_blocking_finding_ids: Object.freeze(nonBlockingFindingIds),
     conflict_ids: Object.freeze(conflictIds),
@@ -147,6 +154,7 @@ function selectOptionIds(options, blockingFindingIds, conflictIds) {
   const blocking = new Set(blockingFindingIds);
   const conflicts = new Set(conflictIds);
   return options
+    .filter((option) => !option.disqualified_reason)
     .filter((option) => option.finding_ids.some((findingId) => blocking.has(findingId)) || option.conflict_ids.some((conflictId) => conflicts.has(conflictId)) || option.strategy === "ask_clarification")
     .map((option) => option.option_id)
     .sort();

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://revix.dev/schemas/review-quality-evaluation.schema.json",
+  "title": "Revix review quality evaluation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eval_id", "rqs", "sub_scores", "precision_recall_f1", "category_recall", "severity_confusion", "matches", "missed_issues", "false_positives", "actual_verdict"],
+  "properties": {
+    "eval_id": { "type": "string", "minLength": 1 },
+    "rqs": { "$ref": "#/$defs/score" },
+    "sub_scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["detection", "precision", "evidence", "severity", "actionability", "decision", "noise"],
+      "properties": {
+        "detection": { "$ref": "#/$defs/score" },
+        "precision": { "$ref": "#/$defs/score" },
+        "evidence": { "$ref": "#/$defs/score" },
+        "severity": { "$ref": "#/$defs/score" },
+        "actionability": { "$ref": "#/$defs/score" },
+        "decision": { "$ref": "#/$defs/score" },
+        "noise": { "$ref": "#/$defs/score" }
+      }
+    },
+    "precision_recall_f1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["precision", "recall", "f1"],
+      "properties": {
+        "precision": { "$ref": "#/$defs/score" },
+        "recall": { "$ref": "#/$defs/score" },
+        "f1": { "$ref": "#/$defs/score" }
+      }
+    },
+    "category_recall": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/score" }
+    },
+    "severity_confusion": { "type": "object" },
+    "matches": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "missed_issues": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "false_positives": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "expected_verdict": {
+      "enum": ["APPROVE", "COMMENT", "REQUEST_CHANGES", "BLOCK"]
+    },
+    "actual_verdict": { "type": "string", "minLength": 1 }
+  },
+  "$defs": {
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    }
+  }
+}

@@ -7,6 +7,7 @@ export interface FinalDecision {
   verdict: Verdict;
   passed: boolean;
   selected_option_ids: string[];
+  option_evaluations: object[];
   blocking_finding_ids: string[];
   non_blocking_finding_ids: string[];
   conflict_ids: string[];

@@ -17,6 +17,9 @@ test("creates request-fix, clarification, and comment-only options", () => {
     "option-comment-finding-nit",
     "option-fix-finding-blocker"
   ]);
+  assert.equal(options.find((option) => option.option_id === "option-fix-finding-blocker").implementation_cost, 3);
+  assert.ok(options.every((option) => option.required_changes.length > 0));
+  assert.ok(options.every((option) => option.score_dimensions.correctness >= 1));
 });
 
 test("creates conflict resolution options before finding options", () => {
@@ -35,6 +38,34 @@ test("creates conflict resolution options before finding options", () => {
   const conflictOption = options.find((option) => option.strategy === "resolve_conflict");
   assert.equal(conflictOption.option_id, "option-conflict-conflict-severity_conflict-a-b");
   assert.equal(conflictOption.confidence, "LOW");
+  assert.ok(options.some((option) => option.strategy === "compromise"));
+  assert.ok(options.some((option) => option.strategy === "minimal_safe_change"));
+  assert.ok(options.some((option) => option.strategy === "prefer_reviewer"));
+});
+
+test("marks options that weaken hard security or contract rules as disqualified", () => {
+  const options = generateSynthesisOptions({
+    findings: [finding("a", { severity: "BLOCKER" }), finding("b", { reviewer_id: "performance", tags: ["performance"], related_quality_rules: ["performance.reasonable_cost"] })],
+    conflicts: [{
+      conflict_id: "conflict-security_vs_performance-a-b",
+      type: "security_vs_performance",
+      conflict_type: "security_vs_performance",
+      finding_ids: ["a", "b"],
+      involved_findings: ["a", "b"],
+      involved_reviewers: ["performance", "security"],
+      summary: "security versus performance conflict",
+      competing_claims: [],
+      affected_quality_rules: ["security.no_new_risk", "performance.reasonable_cost"],
+      evidence_refs: ["src/auth/session.js:42-44"],
+      required_resolution: "Preserve security before accepting performance cost.",
+      resolution_required: true,
+      confidence: "HIGH"
+    }]
+  });
+
+  const preferPerformance = options.find((option) => option.option_id === "option-prefer-b-conflict-security_vs_performance-a-b");
+  assert.equal(preferPerformance.risk, "disqualified");
+  assert.match(preferPerformance.disqualified_reason, /Hard security/);
 });
 
 function finding(id, overrides = {}) {

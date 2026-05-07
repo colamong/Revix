@@ -1,0 +1,6 @@
+node_modules/
+coverage/
+.nyc_output/
+
+# External benchmark data can be re-downloaded and may contain large diffs.
+eval-data/

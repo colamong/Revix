@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../bin/revix.js";
@@ -12,6 +12,22 @@ test("CLI prints markdown for valid input", async () => {
     fixture.inputPath,
     "--project-root",
     fixture.projectRoot
+  ]);
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /Revix PR Review: APPROVE/);
+});
+
+test("CLI review subcommand supports github-comment output", async () => {
+  const fixture = makeFixture();
+  const result = await runCliForTest([
+    "review",
+    "--input",
+    fixture.inputPath,
+    "--project-root",
+    fixture.projectRoot,
+    "--format",
+    "github-comment"
   ]);
 
   assert.equal(result.exitCode, 0);
@@ -36,6 +52,82 @@ test("CLI prints json and fails when configured verdict requires it", async () =
 
   assert.equal(result.exitCode, 2);
   assert.match(result.stdout, /"verdict": "BLOCK"/);
+});
+
+test("CLI dry-run does not fail on request changes", async () => {
+  const fixture = makeFixture({
+    config: `labels:\n  force_reviewers:\n    force-security: [security]\n`,
+    findings: [finding("finding-security")]
+  });
+  const result = await runCliForTest([
+    "review",
+    "--input",
+    fixture.inputPath,
+    "--project-root",
+    fixture.projectRoot,
+    "--reviewer-output",
+    fixture.findingsPath,
+    "--dry-run"
+  ]);
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /Revix PR Review: BLOCK/);
+});
+
+test("CLI check validates project configuration and schemas", async () => {
+  const fixture = makeFixture();
+  const result = await runCliForTest([
+    "check",
+    "--project-root",
+    fixture.projectRoot
+  ]);
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /Revix check passed/);
+  assert.match(result.stdout, /Reviewer skills:/);
+});
+
+test("CLI review can use mock provider fixture directory", async () => {
+  const fixture = makeFixture({
+    config: `labels:\n  force_reviewers:\n    force-security: [security]\n`
+  });
+  const mockDir = join(fixture.projectRoot, "mock-provider");
+  mkdirSync(mockDir);
+  writeFileSync(join(mockDir, "security.json"), JSON.stringify([finding("finding-security")]), "utf8");
+  const result = await runCliForTest([
+    "review",
+    "--input",
+    fixture.inputPath,
+    "--project-root",
+    fixture.projectRoot,
+    "--mock-fixture-dir",
+    "mock-provider",
+    "--dry-run"
+  ]);
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /finding-security/);
+});
+
+test("CLI review accepts separate diff and metadata inputs", async () => {
+  const fixture = makeFixture();
+  const diffPath = join(fixture.projectRoot, "sample.diff");
+  const metadataPath = join(fixture.projectRoot, "metadata.json");
+  writeFileSync(diffPath, prInput().raw_diff, "utf8");
+  writeFileSync(metadataPath, JSON.stringify(prInput().metadata), "utf8");
+  const result = await runCliForTest([
+    "review",
+    "--diff",
+    diffPath,
+    "--metadata",
+    metadataPath,
+    "--project-root",
+    fixture.projectRoot,
+    "--dry-run"
+  ]);
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /Revix PR Review: APPROVE/);
 });
 
 test("CLI exits non-zero for invalid input", async () => {

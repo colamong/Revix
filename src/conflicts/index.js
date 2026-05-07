@@ -7,6 +7,14 @@ export class ConflictDetectionError extends Error {
 
 const BLOCKING = new Set(["BLOCKER", "MAJOR"]);
 const LOW = new Set(["QUESTION", "NIT"]);
+const CONFLICT_TYPE_ALIASES = Object.freeze({
+  severity_conflict: "severity_mismatch",
+  claim_contradiction: "contract_vs_implementation",
+  fix_conflict: "reliability_vs_complexity",
+  scope_conflict: "architecture_vs_scope",
+  confidence_conflict: "duplicate_or_overlapping_findings",
+  security_vs_performance: "security_vs_performance"
+});
 
 export function detectConflicts(findings) {
   if (!Array.isArray(findings)) {
@@ -27,6 +35,12 @@ export function detectConflicts(findings) {
 }
 
 function classifyConflict(left, right) {
+  if (hasTag(left, "security") && hasTag(right, "performance") && sameEvidence(left, right)) {
+    return "security_vs_performance";
+  }
+  if (hasTag(left, "performance") && hasTag(right, "security") && sameEvidence(left, right)) {
+    return "security_vs_performance";
+  }
   if (sameEvidence(left, right) && severityDistance(left.severity, right.severity) >= 3) {
     return "severity_conflict";
   }
@@ -47,14 +61,56 @@ function classifyConflict(left, right) {
 
 function makeConflict(type, left, right) {
   const findingIds = [left.finding_id, right.finding_id].sort();
+  const findings = [left, right].sort((a, b) => a.finding_id.localeCompare(b.finding_id));
+  const affectedRules = [...new Set(findings.flatMap((finding) => finding.related_quality_rules))].sort();
+  const competingClaims = findings.map((finding) => Object.freeze({
+    finding_id: finding.finding_id,
+    reviewer_id: finding.reviewer_id,
+    claim: finding.claim,
+    suggested_fix: finding.suggested_fix,
+    severity: finding.severity,
+    confidence: finding.confidence
+  }));
   return Object.freeze({
     conflict_id: `conflict-${type}-${findingIds.join("-")}`,
     type,
+    conflict_type: CONFLICT_TYPE_ALIASES[type] ?? type,
+    involved_reviewers: Object.freeze([...new Set(findings.map((finding) => finding.reviewer_id))].sort()),
+    involved_findings: Object.freeze(findingIds),
     finding_ids: Object.freeze(findingIds),
     summary: `${type} between ${findingIds[0]} and ${findingIds[1]}`,
+    competing_claims: Object.freeze(competingClaims),
+    affected_quality_rules: Object.freeze(affectedRules),
     evidence_refs: Object.freeze([formatEvidence(left.evidence), formatEvidence(right.evidence)]),
-    resolution_required: true
+    required_resolution: resolutionFor(type, findings),
+    resolution_required: true,
+    confidence: conflictConfidence(type, findings)
   });
+}
+
+function resolutionFor(type, findings) {
+  if (type === "security_vs_performance") {
+    return "Choose a mitigation that preserves security while documenting any accepted performance cost.";
+  }
+  if (type === "severity_conflict") {
+    return "Reconcile severity using the cited impact and quality rule behavior before final judgment.";
+  }
+  if (type === "claim_contradiction") {
+    return "Compare cited evidence and determine which claim is supported by the diff.";
+  }
+  if (type === "fix_conflict") {
+    return "Pick one fix path or define a compromise that satisfies the affected quality rules.";
+  }
+  if (type === "confidence_conflict") {
+    return "Treat the low-confidence side as uncertainty unless stronger evidence is added.";
+  }
+  return `Resolve disagreement between ${findings.map((finding) => finding.reviewer_id).join(" and ")}.`;
+}
+
+function conflictConfidence(type, findings) {
+  if (type === "confidence_conflict" || findings.some((finding) => finding.confidence === "LOW")) return "LOW";
+  if (findings.some((finding) => finding.confidence === "MEDIUM")) return "MEDIUM";
+  return "HIGH";
 }
 
 function sameEvidence(left, right) {
@@ -91,6 +147,10 @@ function incompatibleFix(leftFix, rightFix) {
 function severityDistance(left, right) {
   const order = ["NIT", "QUESTION", "MINOR", "MAJOR", "BLOCKER"];
   return Math.abs(order.indexOf(left) - order.indexOf(right));
+}
+
+function hasTag(finding, tag) {
+  return Array.isArray(finding.tags) && finding.tags.includes(tag);
 }
 
 function formatEvidence(evidence) {
