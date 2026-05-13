@@ -1,0 +1,51 @@
+eval_id: api-break-changed-status-code
+risk_type: api-break
+execution_stage: pre-merge
+review_budget: 2
+expected_verdict: REQUEST_CHANGES
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/api
+    title: "Return 204 from delete endpoint"
+    body: "Switch the delete endpoint to 204 No Content for cleaner clients."
+    author: grace@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/delete-204
+  changed_files:
+    - path: src/api/users/delete.js
+      status: modified
+      additions: 2
+      deletions: 2
+  raw_diff: |
+    diff --git a/src/api/users/delete.js b/src/api/users/delete.js
+    --- a/src/api/users/delete.js
+    +++ b/src/api/users/delete.js
+    @@ -5,8 +5,8 @@ export async function deleteUser(req, res) {
+       const user = await users.findById(req.params.id);
+       if (!user) return res.status(404).json({ error: "not found" });
+       await users.remove(req.params.id);
+    -  return res.status(200).json({ deleted: true, id: user.id });
+    +  return res.status(204).send();
+     }
+
+must_find:
+  - id: status-code-breaking-change
+    severity: BLOCKER
+    quality_rule: contract.no_breaking_change_without_versioning
+    evidence_files: [src/api/users/delete.js]
+    summary_hint: "endpoint status code changed from 200 with body to 204 empty breaking client contract"
+
+should_find:
+  - id: client-deleted-id-removed
+    severity: MAJOR
+    quality_rule: contract.no_breaking_change_without_versioning
+    evidence_files: [src/api/users/delete.js]
+    summary_hint: "removed deleted id field from response payload clients still depend on the id"
+
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "endpoint is faster now"
+    reason: subjective comment is not a contract concern

@@ -21,6 +21,14 @@
       "related_quality_rules": ["security.no_new_risk"]
     }
   ],
+  "security-hardcoded-api-key": [
+    {
+      "severity": "BLOCKER",
+      "claim": "live stripe key hardcoded as source constant exposes production secret to version control",
+      "evidence": { "file_path": "src/payments/client.js", "line_start": 3, "line_end": 4 },
+      "related_quality_rules": ["privacy.no_sensitive_data_exposure"]
+    }
+  ],
   "concurrency-balance-race": [
     {
       "severity": "MAJOR",
@@ -32,6 +40,20 @@
       "severity": "MINOR",
       "claim": "credit application is not idempotent on retry, retry duplicates credit",
       "evidence": { "file_path": "src/billing/balance.ts", "line_start": 23, "line_end": 26 },
+      "related_quality_rules": ["reliability.fail_safely"]
+    }
+  ],
+  "concurrency-cache-stampede": [
+    {
+      "severity": "MAJOR",
+      "claim": "concurrent cache misses each issue the expensive query without singleflight causing stampede on cold key",
+      "evidence": { "file_path": "src/feed/popular.js", "line_start": 6, "line_end": 15 },
+      "related_quality_rules": ["reliability.fail_safely"]
+    },
+    {
+      "severity": "MINOR",
+      "claim": "cache map has no eviction so it grows unbounded across regions over time",
+      "evidence": { "file_path": "src/feed/popular.js", "line_start": 3, "line_end": 3 },
       "related_quality_rules": ["reliability.fail_safely"]
     }
   ],
@@ -49,11 +71,39 @@
       "related_quality_rules": ["reliability.fail_safely"]
     }
   ],
+  "data-loss-truncate-in-migration": [
+    {
+      "severity": "BLOCKER",
+      "claim": "truncate destroys all audit log rows with no backup or export beforehand causing irreversible data loss",
+      "evidence": { "file_path": "migrations/2026_05_reset_audit_log.sql", "line_start": 2, "line_end": 2 },
+      "related_quality_rules": ["reliability.no_data_loss"]
+    },
+    {
+      "severity": "MAJOR",
+      "claim": "audit log rows may be inside the regulatory retention window so deletion is non compliant",
+      "evidence": { "file_path": "migrations/2026_05_reset_audit_log.sql", "line_start": 2, "line_end": 2 },
+      "related_quality_rules": ["reliability.no_data_loss"]
+    }
+  ],
   "api-break-removed-public-field": [
     {
       "severity": "BLOCKER",
       "claim": "removed public field display_name from versioned api response without deprecation window",
       "evidence": { "file_path": "src/api/users/serialize.js", "line_start": 6, "line_end": 6 },
+      "related_quality_rules": ["contract.no_breaking_change_without_versioning"]
+    }
+  ],
+  "api-break-changed-status-code": [
+    {
+      "severity": "BLOCKER",
+      "claim": "endpoint status code changed from 200 with body to 204 empty breaking the documented client contract",
+      "evidence": { "file_path": "src/api/users/delete.js", "line_start": 8, "line_end": 8 },
+      "related_quality_rules": ["contract.no_breaking_change_without_versioning"]
+    },
+    {
+      "severity": "MAJOR",
+      "claim": "removed deleted id field from response payload clients still depend on the id for cache invalidation",
+      "evidence": { "file_path": "src/api/users/delete.js", "line_start": 8, "line_end": 8 },
       "related_quality_rules": ["contract.no_breaking_change_without_versioning"]
     }
   ],
@@ -73,6 +123,14 @@
       "related_quality_rules": ["observability.no_silent_regressions"]
     }
   ],
+  "observability-dropped-correlation-id": [
+    {
+      "severity": "MINOR",
+      "claim": "structured error log dropped request id user id and path losing correlation needed for incident triage",
+      "evidence": { "file_path": "src/api/error-handler.js", "line_start": 4, "line_end": 4 },
+      "related_quality_rules": ["observability.no_silent_regressions"]
+    }
+  ],
   "reliability-unbounded-retry": [
     {
       "severity": "MAJOR",
@@ -85,6 +143,34 @@
       "claim": "no exponential backoff between retry attempts hammers downstream service",
       "evidence": { "file_path": "src/webhooks/dispatch.js", "line_start": 9, "line_end": 14 },
       "related_quality_rules": ["reliability.no_unbounded_retries"]
+    }
+  ],
+  "reliability-blocking-event-loop": [
+    {
+      "severity": "MAJOR",
+      "claim": "synchronous readFileSync inside async request handler blocks the event loop hurting concurrency under load",
+      "evidence": { "file_path": "src/uploads/avatar.js", "line_start": 5, "line_end": 5 },
+      "related_quality_rules": ["reliability.fail_safely"]
+    },
+    {
+      "severity": "MINOR",
+      "claim": "thumbnail computation on the request thread stalls other requests under load",
+      "evidence": { "file_path": "src/uploads/avatar.js", "line_start": 6, "line_end": 6 },
+      "related_quality_rules": ["reliability.fail_safely"]
+    }
+  ],
+  "reliability-unawaited-promise": [
+    {
+      "severity": "MAJOR",
+      "claim": "receipts persist promise is not awaited so failures swallow silently and receipt rows are lost on rejection",
+      "evidence": { "file_path": "src/checkout/finalize.js", "line_start": 9, "line_end": 9 },
+      "related_quality_rules": ["reliability.fail_safely"]
+    },
+    {
+      "severity": "MINOR",
+      "claim": "unawaited promise has no catch handler so rejection becomes an unhandled rejection in production",
+      "evidence": { "file_path": "src/checkout/finalize.js", "line_start": 9, "line_end": 9 },
+      "related_quality_rules": ["observability.no_silent_regressions"]
     }
   ],
   "correctness-pagination-off-by-one": [
@@ -106,6 +192,34 @@
       "severity": "MAJOR",
       "claim": "no test asserts behaviour at bracket boundaries which is the regressing surface",
       "evidence": { "file_path": "src/tax/brackets.js", "line_start": 9, "line_end": 11 },
+      "related_quality_rules": ["testability.verifiable_behavior"]
+    }
+  ],
+  "correctness-timezone-naive-comparison": [
+    {
+      "severity": "MAJOR",
+      "claim": "new date uses server local timezone so cutoff differs across regions and around daylight saving boundaries",
+      "evidence": { "file_path": "src/scheduler/late.js", "line_start": 2, "line_end": 6 },
+      "related_quality_rules": ["testability.verifiable_behavior"]
+    },
+    {
+      "severity": "MAJOR",
+      "claim": "no regression test pins behaviour at the midnight boundary across timezones so future fixes lack a guard",
+      "evidence": { "file_path": "src/scheduler/late.js", "line_start": 2, "line_end": 6 },
+      "related_quality_rules": ["testability.verifiable_behavior"]
+    }
+  ],
+  "correctness-test-removed-assertion": [
+    {
+      "severity": "MAJOR",
+      "claim": "behavioural assertions on session contents replaced with a weak truthy check so regressions slip through unnoticed",
+      "evidence": { "file_path": "test/auth/login.test.js", "line_start": 10, "line_end": 12 },
+      "related_quality_rules": ["testability.verifiable_behavior"]
+    },
+    {
+      "severity": "MINOR",
+      "claim": "test was relaxed without fixing underlying flakiness so the regression surface remains hidden",
+      "evidence": { "file_path": "test/auth/login.test.js", "line_start": 10, "line_end": 12 },
       "related_quality_rules": ["testability.verifiable_behavior"]
     }
   ]

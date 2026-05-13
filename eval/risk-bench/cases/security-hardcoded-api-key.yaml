@@ -1,0 +1,43 @@
+eval_id: security-hardcoded-api-key
+risk_type: security
+execution_stage: pre-merge
+review_budget: 2
+expected_verdict: BLOCK
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/payments
+    title: "Wire stripe live key into payment client"
+    body: "Adds the live stripe key so payments can be charged from staging too."
+    author: dana@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/stripe-live
+  changed_files:
+    - path: src/payments/client.js
+      status: modified
+      additions: 2
+      deletions: 0
+  raw_diff: |
+    diff --git a/src/payments/client.js b/src/payments/client.js
+    --- a/src/payments/client.js
+    +++ b/src/payments/client.js
+    @@ -1,3 +1,5 @@
+     import Stripe from "stripe";
+
+    +const STRIPE_KEY = "sk_live_EXAMPLE-FIXTURE-DO-NOT-USE-not-a-real-key";
+    +export const stripe = new Stripe(STRIPE_KEY);
+
+must_find:
+  - id: hardcoded-live-key
+    severity: BLOCKER
+    quality_rule: privacy.no_sensitive_data_exposure
+    evidence_files: [src/payments/client.js]
+    summary_hint: "live stripe key hardcoded as source constant exposes production secret"
+
+should_find: []
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "missing JSDoc"
+    reason: docs not in scope for credential exposure

@@ -1,0 +1,49 @@
+eval_id: observability-dropped-correlation-id
+risk_type: observability
+execution_stage: pre-merge
+review_budget: 2
+expected_verdict: COMMENT
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/api
+    title: "Simplify request error logging"
+    body: "Removes the verbose context object from the error log line."
+    author: ivy@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/error-log-simple
+  changed_files:
+    - path: src/api/error-handler.js
+      status: modified
+      additions: 1
+      deletions: 4
+  raw_diff: |
+    diff --git a/src/api/error-handler.js b/src/api/error-handler.js
+    --- a/src/api/error-handler.js
+    +++ b/src/api/error-handler.js
+    @@ -3,10 +3,7 @@ import { logger } from "../logging/index.js";
+     export function handleError(error, req, res, next) {
+    -  logger.error({
+    -    request_id: req.id,
+    -    user_id: req.user?.id,
+    -    path: req.path,
+    -    error: error.message
+    -  }, "request failed");
+    +  logger.error(error.message);
+       res.status(500).json({ error: "internal" });
+     }
+
+must_find:
+  - id: dropped-structured-error-context
+    severity: MINOR
+    quality_rule: observability.no_silent_regressions
+    evidence_files: [src/api/error-handler.js]
+    summary_hint: "structured error log dropped request id user id and path losing correlation in incident triage"
+
+should_find: []
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "logger import path"
+    reason: import location is not an observability regression

@@ -1,0 +1,53 @@
+eval_id: correctness-test-removed-assertion
+risk_type: correctness
+execution_stage: pre-merge
+review_budget: 2
+expected_verdict: COMMENT
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/auth
+    title: "Stabilize login tests"
+    body: "The login tests were flaky on CI so we relaxed them."
+    author: liam@example.com
+    labels: []
+    base_ref: main
+    head_ref: fix/flaky-login-tests
+  changed_files:
+    - path: test/auth/login.test.js
+      status: modified
+      additions: 1
+      deletions: 4
+  raw_diff: |
+    diff --git a/test/auth/login.test.js b/test/auth/login.test.js
+    --- a/test/auth/login.test.js
+    +++ b/test/auth/login.test.js
+    @@ -8,8 +8,5 @@ test("login issues a session for valid credentials", async () => {
+       const result = await login({ email: "ada@example.com", password: "correct" });
+
+    -  assert.equal(result.ok, true);
+    -  assert.equal(result.session.user_id, 42);
+    -  assert.ok(result.session.token.length >= 32);
+    -  assert.equal(result.session.expires_in, 3600);
+    +  assert.ok(result);
+     });
+
+must_find:
+  - id: assertions-replaced-with-truthy
+    severity: MAJOR
+    quality_rule: testability.verifiable_behavior
+    evidence_files: [test/auth/login.test.js]
+    summary_hint: "behavioural assertions on session contents replaced with weak truthy check so regressions slip through"
+
+should_find:
+  - id: flakiness-root-cause-unaddressed
+    severity: MINOR
+    quality_rule: testability.verifiable_behavior
+    evidence_files: [test/auth/login.test.js]
+    summary_hint: "test was relaxed without fixing underlying flakiness so the regression surface remains hidden"
+
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "test file naming"
+    reason: filename style is not a testability concern

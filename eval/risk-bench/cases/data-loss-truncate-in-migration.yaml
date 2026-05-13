@@ -1,0 +1,46 @@
+eval_id: data-loss-truncate-in-migration
+risk_type: data-loss
+execution_stage: pre-release
+review_budget: 2
+expected_verdict: BLOCK
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/billing
+    title: "Reset audit log before redesign"
+    body: "Truncates the audit_log table so the new schema migration is clean."
+    author: frank@example.com
+    labels: []
+    base_ref: main
+    head_ref: release/audit-redesign
+  changed_files:
+    - path: migrations/2026_05_reset_audit_log.sql
+      status: added
+      additions: 2
+      deletions: 0
+  raw_diff: |
+    diff --git a/migrations/2026_05_reset_audit_log.sql b/migrations/2026_05_reset_audit_log.sql
+    new file mode 100644
+    --- /dev/null
+    +++ b/migrations/2026_05_reset_audit_log.sql
+    @@ -0,0 +1,2 @@
+    +-- Reset audit log table before the column redesign so the new schema is clean.
+    +TRUNCATE TABLE audit_log;
+
+must_find:
+  - id: truncate-destroys-audit-data
+    severity: BLOCKER
+    quality_rule: reliability.no_data_loss
+    evidence_files: [migrations/2026_05_reset_audit_log.sql]
+    summary_hint: "truncate destroys all audit log rows with no backup or export beforehand"
+
+should_find:
+  - id: audit-compliance-window
+    severity: MAJOR
+    quality_rule: reliability.no_data_loss
+    evidence_files: [migrations/2026_05_reset_audit_log.sql]
+    summary_hint: "audit log rows may be inside the regulatory retention window"
+
+allowed_find: []
+forbidden_find: []

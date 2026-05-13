@@ -1,0 +1,53 @@
+eval_id: reliability-blocking-event-loop
+risk_type: reliability
+execution_stage: pre-merge
+review_budget: 2
+expected_verdict: REQUEST_CHANGES
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/uploads
+    title: "Read avatar synchronously in upload handler"
+    body: "Reads the uploaded avatar from disk before responding to the client."
+    author: hugo@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/avatar-upload
+  changed_files:
+    - path: src/uploads/avatar.js
+      status: modified
+      additions: 3
+      deletions: 0
+  raw_diff: |
+    diff --git a/src/uploads/avatar.js b/src/uploads/avatar.js
+    --- a/src/uploads/avatar.js
+    +++ b/src/uploads/avatar.js
+    @@ -1,4 +1,7 @@
+    -import { readFile } from "node:fs/promises";
+    +import { readFileSync, readFile } from "node:fs";
+
+     export async function handleAvatarUpload(req, res, next) {
+    +  const original = readFileSync(req.file.path);
+    +  await thumbnail(original);
+    +  res.status(204).send();
+     }
+
+must_find:
+  - id: sync-fs-in-request-handler
+    severity: MAJOR
+    quality_rule: reliability.fail_safely
+    evidence_files: [src/uploads/avatar.js]
+    summary_hint: "synchronous readFileSync inside async request handler blocks event loop hurting concurrency"
+
+should_find:
+  - id: thumbnail-cpu-blocking
+    severity: MINOR
+    quality_rule: reliability.fail_safely
+    evidence_files: [src/uploads/avatar.js]
+    summary_hint: "thumbnail computation on request thread stalls other requests under load"
+
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "rename readFile import"
+    reason: import shape is not a reliability concern

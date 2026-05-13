@@ -1,0 +1,59 @@
+eval_id: concurrency-cache-stampede
+risk_type: concurrency
+execution_stage: pre-merge
+review_budget: 3
+expected_verdict: REQUEST_CHANGES
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/feed
+    title: "Cache popular feed query"
+    body: "Adds a cache around the expensive popular-feed query."
+    author: emma@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/feed-cache
+  changed_files:
+    - path: src/feed/popular.js
+      status: modified
+      additions: 9
+      deletions: 1
+  raw_diff: |
+    diff --git a/src/feed/popular.js b/src/feed/popular.js
+    --- a/src/feed/popular.js
+    +++ b/src/feed/popular.js
+    @@ -3,7 +3,15 @@ import { db } from "../db.js";
+     const cache = new Map();
+
+     export async function getPopular(region) {
+    -  return db.query("select * from popular where region = $1", [region]);
+    +  const cached = cache.get(region);
+    +  if (cached) return cached;
+    +
+    +  const rows = await db.query(
+    +    "select * from popular where region = $1",
+    +    [region]
+    +  );
+    +  cache.set(region, rows);
+    +  return rows;
+     }
+
+must_find:
+  - id: cache-stampede-no-singleflight
+    severity: MAJOR
+    quality_rule: reliability.fail_safely
+    evidence_files: [src/feed/popular.js]
+    summary_hint: "concurrent cache misses each issue the expensive query without singleflight causing stampede"
+
+should_find:
+  - id: cache-grows-unbounded
+    severity: MINOR
+    quality_rule: reliability.fail_safely
+    evidence_files: [src/feed/popular.js]
+    summary_hint: "cache map has no eviction so it grows unbounded across regions over time"
+
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "use let instead of const"
+    reason: style not in scope for concurrency review

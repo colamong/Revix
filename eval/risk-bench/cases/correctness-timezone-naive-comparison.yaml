@@ -1,0 +1,52 @@
+eval_id: correctness-timezone-naive-comparison
+risk_type: correctness
+execution_stage: pre-merge
+review_budget: 2
+expected_verdict: COMMENT
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/scheduler
+    title: "Cut off late submissions at midnight"
+    body: "Submissions after midnight are marked late."
+    author: kate@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/late-cutoff
+  changed_files:
+    - path: src/scheduler/late.js
+      status: modified
+      additions: 4
+      deletions: 0
+  raw_diff: |
+    diff --git a/src/scheduler/late.js b/src/scheduler/late.js
+    --- a/src/scheduler/late.js
+    +++ b/src/scheduler/late.js
+    @@ -1,3 +1,7 @@
+     export function isLate(submission) {
+    -  return false;
+    +  const now = new Date();
+    +  const due = new Date(submission.due_at);
+    +  return now.getHours() >= 0
+    +    && now.getTime() > due.getTime();
+     }
+
+must_find:
+  - id: timezone-naive-date-comparison
+    severity: MAJOR
+    quality_rule: testability.verifiable_behavior
+    evidence_files: [src/scheduler/late.js]
+    summary_hint: "new date uses server local timezone so cutoff differs across regions and around daylight saving boundaries"
+
+should_find:
+  - id: no-boundary-test
+    severity: MAJOR
+    quality_rule: testability.verifiable_behavior
+    evidence_files: [src/scheduler/late.js]
+    summary_hint: "no regression test pins behaviour at midnight boundary across timezones"
+
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "rename variable to deadline"
+    reason: naming is not a correctness concern here

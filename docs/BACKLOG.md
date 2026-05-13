@@ -50,8 +50,21 @@ file:line where the issue lives and notes the suggested fix.
 
 ### B-006 — Grow the seed bench from 10 → 30 cases
 
-- v0.1 ships 10 seed cases. The original plan target was 30.
+- v0.1 shipped 10 seed cases. v0.1.1 adds 10 more (now 20 of 30).
 - **Cadence:** ~10 cases per minor release. Track RRS drift over time.
+- The v0.1.1 batch adds the first **APPROVE** case (`refactor-pure-rename`)
+  as false-positive calibration — until now the bench had no scenario
+  where the correct answer is "do not raise anything", so over-firing
+  could not be measured. The case uses `forbidden_find` to penalise the
+  most likely false-positive shapes (false contract-break, false
+  testability gap).
+- Verdict mix after expansion (n=20): BLOCK 6, REQUEST_CHANGES 8,
+  COMMENT 5, APPROVE 1. Baseline: median RRS 100, hard_gated 0,
+  must_recall_pass_rate 1.0.
+- Remaining 10 cases (v0.2 batch) should diversify on: perf (only 1
+  case today), real-world refactors that include a hidden behavioural
+  change, and additional APPROVE calibration shapes (dependency bump,
+  no-op move).
 
 ## Tracking note
 

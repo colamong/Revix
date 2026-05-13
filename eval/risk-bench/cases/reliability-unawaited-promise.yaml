@@ -1,0 +1,50 @@
+eval_id: reliability-unawaited-promise
+risk_type: reliability
+execution_stage: pre-merge
+review_budget: 2
+expected_verdict: REQUEST_CHANGES
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/checkout
+    title: "Persist checkout receipt"
+    body: "Writes a receipt row after the checkout succeeds."
+    author: julia@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/checkout-receipt
+  changed_files:
+    - path: src/checkout/finalize.js
+      status: modified
+      additions: 2
+      deletions: 0
+  raw_diff: |
+    diff --git a/src/checkout/finalize.js b/src/checkout/finalize.js
+    --- a/src/checkout/finalize.js
+    +++ b/src/checkout/finalize.js
+    @@ -6,6 +6,8 @@ export async function finalizeCheckout(order) {
+       const charge = await charges.create(order);
+       order.charge_id = charge.id;
+       await orders.markPaid(order);
+    +  receipts.persist({ order_id: order.id, charge_id: charge.id });
+    +
+       return order;
+     }
+
+must_find:
+  - id: unawaited-receipt-write
+    severity: MAJOR
+    quality_rule: reliability.fail_safely
+    evidence_files: [src/checkout/finalize.js]
+    summary_hint: "receipts persist promise is not awaited so failures swallow silently and receipt rows are lost"
+
+should_find:
+  - id: no-error-handler-on-promise
+    severity: MINOR
+    quality_rule: observability.no_silent_regressions
+    evidence_files: [src/checkout/finalize.js]
+    summary_hint: "unawaited promise has no catch handler so rejection becomes an unhandled rejection in production"
+
+allowed_find: []
+forbidden_find: []

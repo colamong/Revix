@@ -1,0 +1,63 @@
+eval_id: refactor-pure-rename
+risk_type: correctness
+execution_stage: pre-merge
+review_budget: 2
+expected_verdict: APPROVE
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/inventory
+    title: "Rename calc to calculateRestockLevel"
+    body: "Renames calc to calculateRestockLevel everywhere for clarity. No behaviour change."
+    author: maya@example.com
+    labels: []
+    base_ref: main
+    head_ref: refactor/restock-rename
+  changed_files:
+    - path: src/inventory/restock.js
+      status: modified
+      additions: 4
+      deletions: 4
+    - path: test/inventory/restock.test.js
+      status: modified
+      additions: 2
+      deletions: 2
+  raw_diff: |
+    diff --git a/src/inventory/restock.js b/src/inventory/restock.js
+    --- a/src/inventory/restock.js
+    +++ b/src/inventory/restock.js
+    @@ -1,8 +1,8 @@
+    -export function calc(stock, demand, leadTime) {
+    +export function calculateRestockLevel(stock, demand, leadTime) {
+       const safety = Math.ceil(demand * 0.1);
+       const reorder = stock + safety + demand * leadTime;
+       return reorder;
+     }
+
+    -export const calcSafe = (stock, demand) => calc(stock, demand, 1);
+    +export const calculateRestockLevelSafe = (stock, demand) => calculateRestockLevel(stock, demand, 1);
+    diff --git a/test/inventory/restock.test.js b/test/inventory/restock.test.js
+    --- a/test/inventory/restock.test.js
+    +++ b/test/inventory/restock.test.js
+    @@ -1,6 +1,6 @@
+    -import { calc } from "../../src/inventory/restock.js";
+    +import { calculateRestockLevel } from "../../src/inventory/restock.js";
+
+     test("returns reorder level for stable demand", () => {
+    -  assert.equal(calc(10, 5, 2), 26);
+    +  assert.equal(calculateRestockLevel(10, 5, 2), 26);
+     });
+
+must_find: []
+should_find: []
+allowed_find: []
+forbidden_find:
+  - pattern_quality_rule: contract.no_breaking_change_without_versioning
+    reason: rename is internal to the module and not part of the public api
+  - pattern_quality_rule: testability.verifiable_behavior
+    reason: tests were updated in lockstep so behaviour coverage is preserved
+  - pattern_summary: "breaking change"
+    reason: function rename inside a single module is not a behavioural change
+  - pattern_summary: "missing test"
+    reason: tests were updated in the same change

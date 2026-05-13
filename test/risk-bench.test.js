@@ -162,7 +162,7 @@ test("loadRiskBenchCases reads YAML cases from a directory", async () => {
   assert.equal(cases[0].must_find[0].id, "race-id");
 });
 
-test("v0.1 seed bench scores at or above the acceptance threshold", async () => {
+test("seed bench scores at or above the acceptance threshold", async () => {
   const repoRoot = process.cwd();
   const reportPath = join(mkdtempSync(join(tmpdir(), "risk-bench-report-")), "report.json");
   let stdout = "";
@@ -179,7 +179,7 @@ test("v0.1 seed bench scores at or above the acceptance threshold", async () => 
   });
   assert.equal(exitCode, 0, `bench failed: stderr=${stderr} stdout=${stdout}`);
   const report = JSON.parse(readFileSync(reportPath, "utf8"));
-  assert.ok(report.summary.count >= 10, "expected at least 10 v0.1 seed cases");
+  assert.ok(report.summary.count >= 20, `expected at least 20 seed cases, got ${report.summary.count}`);
   assert.ok(report.summary.median_rrs >= 95, `median RRS regressed: ${report.summary.median_rrs}`);
   assert.equal(report.summary.must_recall_pass_rate, 1, "must_recall must hit 1.0 on golden fixture");
   assert.equal(report.summary.hard_gated, 0, "no case should be hard-gated under golden fixture");
