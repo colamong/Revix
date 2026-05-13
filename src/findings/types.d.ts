@@ -33,7 +33,22 @@ export interface FindingValidationContext {
 }
 
 export class FindingValidationError extends Error {}
+export class FindingOutOfScopeError extends FindingValidationError {
+  finding_id: string | null;
+  reason: string;
+}
+
+export interface DroppedFinding {
+  finding_id: string | null;
+  reviewer_id: string;
+  reason: string;
+}
+
+export interface ValidatedFindings {
+  findings: readonly StructuredFinding[];
+  dropped: readonly DroppedFinding[];
+}
 
 export function validateFinding(finding: unknown, context: FindingValidationContext): StructuredFinding;
-export function validateFindings(findings: unknown, context: FindingValidationContext): readonly StructuredFinding[];
+export function validateFindings(findings: unknown, context: FindingValidationContext): ValidatedFindings;
 export function findingCanBlockMerge(finding: StructuredFinding): boolean;

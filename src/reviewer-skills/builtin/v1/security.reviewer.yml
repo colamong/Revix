@@ -13,7 +13,7 @@ bias:
   - Treat secrets, auth, permission checks, and data exposure as high risk.
 flexibility_score: 0.2
 allowed_scope:
-  tags: [security, privacy, auth, query, data-access, logging]
+  tags: [security, privacy, auth, query, data-access, logging, data-exposure]
   quality_rules:
     - security.no_new_risk
     - privacy.no_sensitive_data_exposure

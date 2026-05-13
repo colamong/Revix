@@ -13,7 +13,7 @@ bias:
   - Prefer simple dependency direction.
 flexibility_score: 0.45
 allowed_scope:
-  tags: [architecture, maintainability, boundary, coupling, simplicity]
+  tags: [architecture, maintainability, boundary, coupling, simplicity, reliability]
   quality_rules:
     - maintainability.clear_boundaries
     - simplicity.minimal_necessary_change

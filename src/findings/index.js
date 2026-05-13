@@ -35,11 +35,40 @@ export class FindingValidationError extends Error {
   }
 }
 
+export class FindingOutOfScopeError extends FindingValidationError {
+  constructor(message, { finding_id, reason } = {}) {
+    super(message);
+    this.name = "FindingOutOfScopeError";
+    this.finding_id = finding_id ?? null;
+    this.reason = reason ?? message;
+  }
+}
+
 export function validateFindings(findings, context) {
   if (!Array.isArray(findings)) {
     throw new FindingValidationError("findings must be an array");
   }
-  return Object.freeze(findings.map((finding) => validateFinding(finding, context)));
+  const accepted = [];
+  const dropped = [];
+  for (const finding of findings) {
+    try {
+      accepted.push(validateFinding(finding, context));
+    } catch (error) {
+      if (error instanceof FindingOutOfScopeError) {
+        dropped.push(Object.freeze({
+          finding_id: error.finding_id ?? finding?.finding_id ?? null,
+          reviewer_id: context.reviewer_id,
+          reason: error.reason
+        }));
+        continue;
+      }
+      throw error;
+    }
+  }
+  return Object.freeze({
+    findings: Object.freeze(accepted),
+    dropped: Object.freeze(dropped)
+  });
 }
 
 export function validateFinding(finding, context) {
@@ -105,14 +134,20 @@ function validateScope(finding, context) {
   const allowedTags = new Set(context.allowed_tags);
   for (const tag of finding.tags) {
     if (!allowedTags.has(tag)) {
-      throw new FindingValidationError(`finding tag is outside reviewer scope: ${tag}`);
+      throw new FindingOutOfScopeError(`finding tag is outside reviewer scope: ${tag}`, {
+        finding_id: finding.finding_id,
+        reason: `tag '${tag}' not in allowed_scope.tags`
+      });
     }
   }
 
   const allowedRules = new Set(context.allowed_quality_rules);
   for (const ruleId of finding.related_quality_rules) {
     if (!allowedRules.has(ruleId)) {
-      throw new FindingValidationError(`finding quality rule is outside reviewer scope: ${ruleId}`);
+      throw new FindingOutOfScopeError(`finding quality rule is outside reviewer scope: ${ruleId}`, {
+        finding_id: finding.finding_id,
+        reason: `quality_rule '${ruleId}' not in allowed_scope.quality_rules`
+      });
     }
   }
 }

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadDefaultConstitution } from "../src/constitution/index.js";
 import {
+  FindingOutOfScopeError,
   FindingValidationError,
   findingCanBlockMerge,
   validateFinding,
@@ -31,10 +32,15 @@ test("accepts a complete valid finding with primary evidence and optional eviden
 });
 
 test("validates arrays of findings", () => {
-  const findings = validateFindings([validFinding({ finding_id: "finding-001" }), validFinding({ finding_id: "finding-002" })], baseContext);
+  const { findings, dropped } = validateFindings(
+    [validFinding({ finding_id: "finding-001" }), validFinding({ finding_id: "finding-002" })],
+    baseContext
+  );
 
   assert.equal(findings.length, 2);
+  assert.equal(dropped.length, 0);
   assert.ok(Object.isFrozen(findings));
+  assert.ok(Object.isFrozen(dropped));
 });
 
 test("rejects missing evidence", () => {
@@ -104,12 +110,48 @@ test("rejects unknown related quality rules", () => {
   );
 });
 
-test("rejects findings outside reviewer scope", () => {
-  assert.throws(() => validateFinding(validFinding({ reviewer_id: "performance-reviewer" }), baseContext), FindingValidationError);
-  assert.throws(() => validateFinding(validFinding({ tags: ["performance"] }), baseContext), FindingValidationError);
+test("hard-throws when reviewer_id mismatches reviewer scope", () => {
   assert.throws(
-    () => validateFinding(validFinding({ related_quality_rules: ["query.no_unsafe_query_access"] }), baseContext),
-    FindingValidationError
+    () => validateFinding(validFinding({ reviewer_id: "performance-reviewer" }), baseContext),
+    (error) => error instanceof FindingValidationError && !(error instanceof FindingOutOfScopeError)
+  );
+});
+
+test("soft-throws FindingOutOfScopeError when tags are outside reviewer scope", () => {
+  assert.throws(
+    () => validateFinding(validFinding({ finding_id: "finding-tag", tags: ["performance"] }), baseContext),
+    (error) => error instanceof FindingOutOfScopeError && error.finding_id === "finding-tag" && /tag.*performance/.test(error.reason)
+  );
+});
+
+test("soft-throws FindingOutOfScopeError when quality_rule is outside reviewer scope", () => {
+  assert.throws(
+    () => validateFinding(validFinding({ finding_id: "finding-rule", related_quality_rules: ["query.no_unsafe_query_access"] }), baseContext),
+    (error) => error instanceof FindingOutOfScopeError && /quality_rule.*query/.test(error.reason)
+  );
+});
+
+test("validateFindings drops off-scope findings and surfaces the rest plus a reason list", () => {
+  const accepted = validFinding({ finding_id: "finding-ok" });
+  const offScopeTag = validFinding({ finding_id: "finding-bad-tag", tags: ["performance"] });
+  const offScopeRule = validFinding({ finding_id: "finding-bad-rule", related_quality_rules: ["query.no_unsafe_query_access"] });
+
+  const { findings, dropped } = validateFindings([accepted, offScopeTag, offScopeRule], baseContext);
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].finding_id, "finding-ok");
+  assert.equal(dropped.length, 2);
+  assert.deepEqual(dropped.map((entry) => entry.finding_id).sort(), ["finding-bad-rule", "finding-bad-tag"]);
+  for (const entry of dropped) {
+    assert.equal(entry.reviewer_id, "security-reviewer");
+    assert.ok(entry.reason.length > 0);
+  }
+});
+
+test("validateFindings still propagates hard validation errors (reviewer_id mismatch)", () => {
+  assert.throws(
+    () => validateFindings([validFinding({ reviewer_id: "performance-reviewer" })], baseContext),
+    (error) => error instanceof FindingValidationError && !(error instanceof FindingOutOfScopeError)
   );
 });
 

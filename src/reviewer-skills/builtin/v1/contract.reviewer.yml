@@ -14,7 +14,7 @@ bias:
   - Require migration or versioning for breaking changes.
 flexibility_score: 0.35
 allowed_scope:
-  tags: [contract, api, schema, compatibility, versioning, migration]
+  tags: [contract, api, schema, compatibility, versioning, migration, cli]
   quality_rules:
     - contract.no_breaking_change_without_versioning
     - testability.verifiable_behavior

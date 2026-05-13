@@ -29,6 +29,7 @@ export async function runSelectedReviewers({ prInput, classification, selectedRe
   }
   const results = [];
   const errors = [];
+  const droppedAll = [];
 
   for (const selected of selectedReviewers) {
     try {
@@ -38,11 +39,13 @@ export async function runSelectedReviewers({ prInput, classification, selectedRe
         reviewer: selected.skill,
         selection: selected
       });
-      const normalizedFindings = validateFindings(rawFindings ?? [], selected.scope_context);
+      const { findings: normalizedFindings, dropped } = validateFindings(rawFindings ?? [], selected.scope_context);
       results.push(Object.freeze({
         reviewer_id: selected.reviewer_id,
-        findings: normalizedFindings
+        findings: normalizedFindings,
+        dropped
       }));
+      droppedAll.push(...dropped);
     } catch (error) {
       const wrapped = new ReviewerRunError(`reviewer failed: ${selected.reviewer_id}`, {
         reviewerId: selected.reviewer_id,
@@ -58,6 +61,7 @@ export async function runSelectedReviewers({ prInput, classification, selectedRe
   return Object.freeze({
     results: Object.freeze(results.sort((left, right) => left.reviewer_id.localeCompare(right.reviewer_id))),
     findings: Object.freeze(results.flatMap((result) => [...result.findings]).sort((left, right) => left.finding_id.localeCompare(right.finding_id))),
-    errors: Object.freeze(errors)
+    errors: Object.freeze(errors),
+    dropped: Object.freeze(droppedAll)
   });
 }

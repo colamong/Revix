@@ -442,7 +442,7 @@ test("revix eval normalization coerces findings into selected reviewer scope", (
   assert.equal(findings[0].reviewer_id, "test");
   assert.deepEqual(findings[0].tags, ["test"]);
   assert.deepEqual(findings[0].related_quality_rules, ["testability.verifiable_behavior"]);
-  assert.equal(validateFindings(findings, evalFindingContext()).length, 1);
+  assert.equal(validateFindings(findings, evalFindingContext()).findings.length, 1);
 });
 
 test("revix eval normalization downgrades BLOCKER without a hard rule", () => {
@@ -466,7 +466,7 @@ test("revix eval normalization downgrades BLOCKER without a hard rule", () => {
   });
 
   assert.equal(finding.severity, "MAJOR");
-  assert.equal(validateFindings([finding], evalFindingContext()).length, 1);
+  assert.equal(validateFindings([finding], evalFindingContext()).findings.length, 1);
 });
 
 test("revix eval normalization raises MAJOR low confidence to medium confidence", () => {
@@ -490,7 +490,7 @@ test("revix eval normalization raises MAJOR low confidence to medium confidence"
   });
 
   assert.equal(finding.confidence, "MEDIUM");
-  assert.equal(validateFindings([finding], evalFindingContext()).length, 1);
+  assert.equal(validateFindings([finding], evalFindingContext()).findings.length, 1);
 });
 
 test("revix eval normalization repairs reversed evidence line ranges", () => {
@@ -516,7 +516,7 @@ test("revix eval normalization repairs reversed evidence line ranges", () => {
   assert.equal(finding.severity, "MINOR");
   assert.equal(finding.evidence.line_start, 9);
   assert.equal(finding.evidence.line_end, 9);
-  assert.equal(validateFindings([finding], evalFindingContext()).length, 1);
+  assert.equal(validateFindings([finding], evalFindingContext()).findings.length, 1);
 });
 
 test("revix eval normalization replaces vague actionability fields", () => {
@@ -543,7 +543,7 @@ test("revix eval normalization replaces vague actionability fields", () => {
   assert.match(finding.impact, /regression/);
   assert.match(finding.suggested_fix, /Update the changed code/);
   assert.match(finding.verification_test, /focused regression test/);
-  assert.equal(validateFindings([finding], evalFindingContext()).length, 1);
+  assert.equal(validateFindings([finding], evalFindingContext()).findings.length, 1);
 });
 
 test("command runner wraps launch failures with structured details", async () => {

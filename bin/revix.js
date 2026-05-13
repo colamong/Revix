@@ -151,6 +151,8 @@ async function runReview(args, { cwd, stdout, stderr }) {
     fixtureDir: args.mockFixtureDir
   });
 
+  emitDroppedFindingsWarning(result, stderr);
+
   if (outputFormat === "json") {
     stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {
@@ -161,6 +163,20 @@ async function runReview(args, { cwd, stdout, stderr }) {
     return 2;
   }
   return 0;
+}
+
+function emitDroppedFindingsWarning(result, stderr) {
+  const dropped = result?.reviewerRun?.dropped;
+  if (!stderr || !Array.isArray(dropped) || dropped.length === 0) return;
+  const byReviewer = new Map();
+  for (const entry of dropped) {
+    const reviewer = entry.reviewer_id ?? "unknown";
+    byReviewer.set(reviewer, (byReviewer.get(reviewer) ?? 0) + 1);
+  }
+  const summary = [...byReviewer.entries()]
+    .map(([reviewer, count]) => `${reviewer} (${count})`)
+    .join(", ");
+  stderr.write(`revix: ${dropped.length} finding(s) dropped from reviewer scope - ${summary}. Inspect with --format json under reviewerRun.dropped.\n`);
 }
 
 async function runEval(argv, args, { cwd, stdout }) {
