@@ -1,0 +1,51 @@
+eval_id: concurrency-balance-race
+risk_type: concurrency
+execution_stage: pre-merge
+review_budget: 3
+expected_verdict: REQUEST_CHANGES
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/billing
+    title: "Apply promo credit during checkout"
+    body: "Reads balance, applies credit, writes updated balance."
+    author: carol@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/promo-credit
+  changed_files:
+    - path: src/billing/balance.ts
+      status: modified
+      additions: 4
+      deletions: 1
+  raw_diff: |
+    diff --git a/src/billing/balance.ts b/src/billing/balance.ts
+    --- a/src/billing/balance.ts
+    +++ b/src/billing/balance.ts
+    @@ -22,7 +22,10 @@ export async function applyCredit(userId: string, credit: number) {
+    -  return updateBalance(userId, credit);
+    +  const current = await readBalance(userId);
+    +  await delay(0);
+    +  const next = current + credit;
+    +  await writeBalance(userId, next);
+     }
+
+must_find:
+  - id: balance-read-write-race
+    severity: MAJOR
+    quality_rule: reliability.fail_safely
+    evidence_files: [src/billing/balance.ts]
+    summary_hint: "balance read then write across await without lock causes race"
+
+should_find:
+  - id: missing-idempotency
+    severity: MINOR
+    quality_rule: reliability.fail_safely
+    evidence_files: [src/billing/balance.ts]
+    summary_hint: "credit application is not idempotent on retry"
+
+allowed_find: []
+forbidden_find:
+  - pattern_quality_rule: "style.*"
+    reason: style nits not in scope

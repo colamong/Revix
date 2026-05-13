@@ -20,11 +20,28 @@ import {
   evaluateReviewQualitySuite
 } from "./index.js";
 
-export const COMPARATIVE_REVIEWERS = Object.freeze(["revix", "gstack", "greptile", "coderabbit"]);
+export const COMPARATIVE_REVIEWERS = Object.freeze(["revix", "codex-basic", "gstack", "greptile", "coderabbit"]);
 export const DEFAULT_EVAL_COMMAND = "node scripts/codex-eval-runner.mjs";
 export const DEFAULT_EVAL_TIMEOUT_MS = 300000;
+export const BENCHMARK_POLICY = Object.freeze({
+  version: "2026-05-07",
+  max_total_findings: 6,
+  max_findings_per_reviewer: 2
+});
+
+const SEVERITY_RANK = Object.freeze({ NIT: 0, QUESTION: 1, MINOR: 2, MAJOR: 3, BLOCKER: 4 });
+const CONFIDENCE_RANK = Object.freeze({ LOW: 0, MEDIUM: 1, HIGH: 2 });
 
 const STYLE_PROFILES = Object.freeze({
+  "codex-basic": Object.freeze({
+    display_name: "Codex Basic Review",
+    rubric: [
+      "Act as a general-purpose AI code reviewer using only the PR metadata and diff.",
+      "Identify concrete bugs, security risks, regressions, missing tests, and documentation issues.",
+      "Avoid framework-specific assumptions and avoid reporting style-only comments unless they affect behavior.",
+      "Return concise actionable findings with evidence and a verification step."
+    ]
+  }),
   gstack: Object.freeze({
     display_name: "GStack Review",
     rubric: [
@@ -332,6 +349,46 @@ export function countComparativeReportErrors(report) {
   return Object.values(report?.reviewers ?? {}).reduce((sum, reviewer) => sum + (reviewer.errors?.length ?? 0), 0);
 }
 
+export function applyBenchmarkFindingPolicy({
+  reviewerRun,
+  evalCase,
+  qualityRules,
+  maxTotalFindings = BENCHMARK_POLICY.max_total_findings,
+  maxFindingsPerReviewer = BENCHMARK_POLICY.max_findings_per_reviewer
+}) {
+  const rulesById = new Map((qualityRules ?? []).filter((rule) => rule?.enabled !== false).map((rule) => [rule.id, rule]));
+  const changedFiles = new Set(changedFilePaths(evalCase));
+  const calibratedResults = (reviewerRun?.results ?? []).map((result) => {
+    const calibrated = result.findings
+      .map((finding) => calibrateBenchmarkFinding(finding, { rulesById, changedFiles }))
+      .sort((left, right) => compareBenchmarkFindings(left, right, { rulesById, changedFiles }))
+      .slice(0, maxFindingsPerReviewer);
+    return Object.freeze({
+      reviewer_id: result.reviewer_id,
+      findings: Object.freeze(calibrated)
+    });
+  });
+  const keptFindingIds = new Set(calibratedResults
+    .flatMap((result) => [...result.findings])
+    .sort((left, right) => compareBenchmarkFindings(left, right, { rulesById, changedFiles }))
+    .slice(0, maxTotalFindings)
+    .map((finding) => finding.finding_id));
+  const results = calibratedResults.map((result) => Object.freeze({
+    reviewer_id: result.reviewer_id,
+    findings: Object.freeze(result.findings.filter((finding) => keptFindingIds.has(finding.finding_id)))
+  }));
+  return deepFreeze({
+    results,
+    findings: results.flatMap((result) => [...result.findings]).sort((left, right) => left.finding_id.localeCompare(right.finding_id)),
+    errors: reviewerRun?.errors ?? [],
+    benchmark_policy: {
+      ...BENCHMARK_POLICY,
+      input_findings: (reviewerRun?.findings ?? []).length,
+      output_findings: keptFindingIds.size
+    }
+  });
+}
+
 export function buildComparativeReport(results) {
   const byReviewer = new Map();
   for (const result of results) {
@@ -459,36 +516,76 @@ async function runRevixEvalProfile({ evalCase, modelRunner, cacheDir, projectRoo
     runner,
     continueOnError: true
   });
-  const conflicts = detectConflicts(reviewerRun.findings);
-  const synthesisOptions = generateSynthesisOptions({ findings: reviewerRun.findings, conflicts });
-  const finalDecision = evaluateFinalDecision({ qualityRules, findings: reviewerRun.findings, conflicts, synthesisOptions });
+  const benchmarkReviewerRun = applyBenchmarkFindingPolicy({ reviewerRun, evalCase, qualityRules });
+  const conflicts = detectConflicts(benchmarkReviewerRun.findings);
+  const synthesisOptions = generateSynthesisOptions({ findings: benchmarkReviewerRun.findings, conflicts });
+  const finalDecision = evaluateFinalDecision({ qualityRules, findings: benchmarkReviewerRun.findings, conflicts, synthesisOptions });
   const output = composeFinalReview({
     prInput,
     classification,
     selectedReviewers,
-    findings: reviewerRun.findings,
+    findings: benchmarkReviewerRun.findings,
     conflicts,
     synthesisOptions,
     finalDecision,
     format: "github-comment"
   });
   return deepFreeze({
-    reviewerRun,
+    reviewerRun: benchmarkReviewerRun,
     conflicts,
     synthesisOptions,
     finalDecision,
     output,
     diagnostic: {
+      benchmark_policy: benchmarkReviewerRun.benchmark_policy,
       reviewer_runs: selectedReviewers.map((selected) => {
-        const result = reviewerRun.results.find((item) => item.reviewer_id === selected.reviewer_id);
+        const rawResult = reviewerRun.results.find((item) => item.reviewer_id === selected.reviewer_id);
+        const result = benchmarkReviewerRun.results.find((item) => item.reviewer_id === selected.reviewer_id);
         return {
           reviewer_id: selected.reviewer_id,
           finding_count: result?.findings.length ?? 0,
+          raw_finding_count: rawResult?.findings.length ?? 0,
           allowed_tags: selected.scope_context.allowed_tags
         };
       })
     }
   });
+}
+
+function calibrateBenchmarkFinding(finding, { rulesById, changedFiles }) {
+  const hardRuleIds = finding.related_quality_rules.filter((ruleId) => rulesById.get(ruleId)?.kind === "hard");
+  const changedFileEvidence = changedFiles.has(finding.evidence?.file_path);
+  const hasBlockingEvidence = finding.confidence === "HIGH" && changedFileEvidence && hardRuleIds.length > 0;
+  let severity = finding.severity;
+  if ((severity === "BLOCKER" || severity === "MAJOR") && !hasBlockingEvidence) {
+    severity = "MINOR";
+  }
+  return Object.freeze({
+    ...finding,
+    severity
+  });
+}
+
+function compareBenchmarkFindings(left, right, { rulesById, changedFiles }) {
+  return comparePriority(benchmarkFindingPriority(right, { rulesById, changedFiles }), benchmarkFindingPriority(left, { rulesById, changedFiles }))
+    || left.finding_id.localeCompare(right.finding_id);
+}
+
+function benchmarkFindingPriority(finding, { rulesById, changedFiles }) {
+  return [
+    SEVERITY_RANK[finding.severity] ?? 0,
+    finding.related_quality_rules.some((ruleId) => rulesById.get(ruleId)?.kind === "hard") ? 1 : 0,
+    changedFiles.has(finding.evidence?.file_path) ? 1 : 0,
+    CONFIDENCE_RANK[finding.confidence] ?? 0
+  ];
+}
+
+function comparePriority(left, right) {
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const difference = (left[index] ?? 0) - (right[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
 }
 
 async function runStyleEvalProfile({ evalCase, reviewer, modelRunner, cacheDir }) {

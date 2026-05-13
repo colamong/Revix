@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import {
+  applyBenchmarkFindingPolicy,
   buildComparativeReport,
   buildProfilePrompt,
   invokeModelForJson,
@@ -14,6 +15,7 @@ import {
   renderComparativeMarkdown,
   runComparativeReviewQualityEval
 } from "../src/evaluation/comparative.js";
+import { loadDefaultConstitution } from "../src/constitution/index.js";
 
 test("profile prompts do not expose ground truth fields", () => {
   const prompt = buildProfilePrompt({ profile: "gstack", evalCase: evalCase() });
@@ -24,6 +26,14 @@ test("profile prompts do not expose ground truth fields", () => {
   assert.doesNotMatch(serialized, /The hidden expected issue/);
   assert.match(serialized, /gstack/);
   assert.match(serialized, /diff --git/);
+});
+
+test("codex-basic profile prompt is available for baseline comparisons", () => {
+  const prompt = buildProfilePrompt({ profile: "codex-basic", evalCase: evalCase() });
+  const serialized = JSON.stringify(prompt);
+
+  assert.match(serialized, /Codex Basic Review/);
+  assert.doesNotMatch(serialized, /expected_issues/);
 });
 
 test("normalizes recreated reviewer findings into Revix finding shape", () => {
@@ -83,6 +93,44 @@ test("normalizes Revix reviewer findings back into selected scope", () => {
   assert.deepEqual(findings[0].tags, ["docs"]);
   assert.deepEqual(findings[0].related_quality_rules, ["documentation.must_update"]);
   assert.equal(findings[0].evidence.file_path, "src/auth.js");
+});
+
+test("benchmark policy caps Revix findings and de-escalates weak blocking findings", () => {
+  const reviewerRun = {
+    results: [
+      {
+        reviewer_id: "security",
+        findings: [
+          finding("a-hard-high", { severity: "BLOCKER", confidence: "HIGH", related_quality_rules: ["security.no_new_risk"] }),
+          finding("b-hard-medium", { severity: "MAJOR", confidence: "MEDIUM", related_quality_rules: ["security.no_new_risk"] }),
+          finding("c-soft-high", { severity: "MAJOR", confidence: "HIGH", related_quality_rules: ["readability.easy_to_understand"], tags: ["readability"] })
+        ]
+      },
+      {
+        reviewer_id: "documentation",
+        findings: [
+          finding("d-doc", { reviewer_id: "documentation", severity: "MAJOR", related_quality_rules: ["readability.easy_to_understand"], tags: ["docs"] })
+        ]
+      }
+    ],
+    findings: [],
+    errors: []
+  };
+  reviewerRun.findings = reviewerRun.results.flatMap((result) => result.findings);
+
+  const calibrated = applyBenchmarkFindingPolicy({
+    reviewerRun,
+    evalCase: evalCase(),
+    qualityRules: loadDefaultConstitution(),
+    maxTotalFindings: 2,
+    maxFindingsPerReviewer: 2
+  });
+
+  assert.equal(calibrated.benchmark_policy.input_findings, 4);
+  assert.equal(calibrated.benchmark_policy.output_findings, 2);
+  assert.deepEqual(calibrated.findings.map((item) => item.finding_id), ["a-hard-high", "b-hard-medium"]);
+  assert.equal(calibrated.findings.find((item) => item.finding_id === "a-hard-high").severity, "BLOCKER");
+  assert.equal(calibrated.findings.find((item) => item.finding_id === "b-hard-medium").severity, "MINOR");
 });
 
 test("model JSON parser handles Claude JSON envelopes and markdown fences", () => {
@@ -237,6 +285,28 @@ function evalCase(overrides = {}) {
     ],
     expected_verdict: "BLOCK",
     human_review_comments: [{ body: "The hidden expected issue should never appear in prompts." }],
+    ...overrides
+  };
+}
+
+function finding(id, overrides = {}) {
+  return {
+    finding_id: id,
+    reviewer_id: "security",
+    severity: "MAJOR",
+    claim: "The raw token is logged and can expose credentials.",
+    evidence: {
+      file_path: "src/auth.js",
+      line_start: 2,
+      line_end: 2,
+      snippet: "logger.info({ token: session.token })"
+    },
+    impact: "A leaked token can be reused by anyone who can read aggregated application logs.",
+    suggested_fix: "Remove the token from the log payload or replace it with a non-sensitive identifier.",
+    verification_test: "Add a regression test that asserts the emitted log payload never contains the raw token.",
+    confidence: "HIGH",
+    related_quality_rules: ["security.no_new_risk"],
+    tags: ["security"],
     ...overrides
   };
 }

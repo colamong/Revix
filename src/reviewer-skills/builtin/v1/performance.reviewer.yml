@@ -13,9 +13,10 @@ bias:
   - Treat avoidable fan-out and unbounded loops as high risk.
 flexibility_score: 0.5
 allowed_scope:
-  tags: [performance, cost, latency, memory, network, query]
+  tags: [performance, cost, latency, memory, network, query, n-plus-one, hot-path]
   quality_rules:
     - performance.reasonable_cost
+    - performance.no_n_plus_one
     - query.no_unsafe_query_access
     - testability.verifiable_behavior
   file_patterns: ["**/*"]
@@ -34,6 +35,7 @@ severity_policy:
   style_only_max_severity: NIT
 quality_rules_focus:
   - performance.reasonable_cost
+  - performance.no_n_plus_one
   - query.no_unsafe_query_access
   - testability.verifiable_behavior
 prompt_instructions:

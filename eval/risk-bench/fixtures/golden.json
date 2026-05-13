@@ -1,0 +1,112 @@
+{
+  "security-log-token-leak": [
+    {
+      "severity": "MAJOR",
+      "claim": "session token written to logs leaks credentials in shared logging infrastructure",
+      "evidence": { "file_path": "src/auth/session.js", "line_start": 11, "line_end": 11 },
+      "related_quality_rules": ["security.no_new_risk"]
+    }
+  ],
+  "security-sql-concat-injection": [
+    {
+      "severity": "BLOCKER",
+      "claim": "query string interpolated directly into sql statement causes injection vector",
+      "evidence": { "file_path": "src/orders/list.js", "line_start": 10, "line_end": 13 },
+      "related_quality_rules": ["security.no_new_risk"]
+    },
+    {
+      "severity": "MAJOR",
+      "claim": "user id interpolated unparameterised even when numeric, breaks defence in depth",
+      "evidence": { "file_path": "src/orders/list.js", "line_start": 10, "line_end": 13 },
+      "related_quality_rules": ["security.no_new_risk"]
+    }
+  ],
+  "concurrency-balance-race": [
+    {
+      "severity": "MAJOR",
+      "claim": "balance read then write across await without lock causes race condition",
+      "evidence": { "file_path": "src/billing/balance.ts", "line_start": 23, "line_end": 26 },
+      "related_quality_rules": ["reliability.fail_safely"]
+    },
+    {
+      "severity": "MINOR",
+      "claim": "credit application is not idempotent on retry, retry duplicates credit",
+      "evidence": { "file_path": "src/billing/balance.ts", "line_start": 23, "line_end": 26 },
+      "related_quality_rules": ["reliability.fail_safely"]
+    }
+  ],
+  "data-loss-drop-column-migration": [
+    {
+      "severity": "BLOCKER",
+      "claim": "drop column is irreversible and data is not backed up beforehand causing data loss",
+      "evidence": { "file_path": "migrations/2026_05_drop_preferred_currency.sql", "line_start": 1, "line_end": 1 },
+      "related_quality_rules": ["reliability.no_data_loss"]
+    },
+    {
+      "severity": "MAJOR",
+      "claim": "column dropped in single step without ensuring no live readers during rolling deploy",
+      "evidence": { "file_path": "migrations/2026_05_drop_preferred_currency.sql", "line_start": 1, "line_end": 1 },
+      "related_quality_rules": ["reliability.fail_safely"]
+    }
+  ],
+  "api-break-removed-public-field": [
+    {
+      "severity": "BLOCKER",
+      "claim": "removed public field display_name from versioned api response without deprecation window",
+      "evidence": { "file_path": "src/api/users/serialize.js", "line_start": 6, "line_end": 6 },
+      "related_quality_rules": ["contract.no_breaking_change_without_versioning"]
+    }
+  ],
+  "perf-n-plus-one-hot-path": [
+    {
+      "severity": "MAJOR",
+      "claim": "loop performs one customer lookup per order causing n plus one queries in hot path",
+      "evidence": { "file_path": "src/orders/list.js", "line_start": 17, "line_end": 20 },
+      "related_quality_rules": ["performance.no_n_plus_one"]
+    }
+  ],
+  "observability-removed-structured-log": [
+    {
+      "severity": "MINOR",
+      "claim": "structured checkout finalized log replaced with unstructured done string loses ops visibility",
+      "evidence": { "file_path": "src/checkout/finalize.js", "line_start": 32, "line_end": 35 },
+      "related_quality_rules": ["observability.no_silent_regressions"]
+    }
+  ],
+  "reliability-unbounded-retry": [
+    {
+      "severity": "MAJOR",
+      "claim": "while true retry loop has no cap and no backoff causing runaway delivery calls",
+      "evidence": { "file_path": "src/webhooks/dispatch.js", "line_start": 9, "line_end": 14 },
+      "related_quality_rules": ["reliability.no_unbounded_retries"]
+    },
+    {
+      "severity": "MINOR",
+      "claim": "no exponential backoff between retry attempts hammers downstream service",
+      "evidence": { "file_path": "src/webhooks/dispatch.js", "line_start": 9, "line_end": 14 },
+      "related_quality_rules": ["reliability.no_unbounded_retries"]
+    }
+  ],
+  "correctness-pagination-off-by-one": [
+    {
+      "severity": "MAJOR",
+      "claim": "end index adds plus one returning one extra item per page off by one bug",
+      "evidence": { "file_path": "src/search/paginate.js", "line_start": 2, "line_end": 5 },
+      "related_quality_rules": ["testability.verifiable_behavior"]
+    }
+  ],
+  "correctness-tax-bracket-boundary": [
+    {
+      "severity": "BLOCKER",
+      "claim": "boundary income values now fall outside any bracket producing wrong tax for boundary incomes",
+      "evidence": { "file_path": "src/tax/brackets.js", "line_start": 9, "line_end": 11 },
+      "related_quality_rules": ["testability.verifiable_behavior"]
+    },
+    {
+      "severity": "MAJOR",
+      "claim": "no test asserts behaviour at bracket boundaries which is the regressing surface",
+      "evidence": { "file_path": "src/tax/brackets.js", "line_start": 9, "line_end": 11 },
+      "related_quality_rules": ["testability.verifiable_behavior"]
+    }
+  ]
+}

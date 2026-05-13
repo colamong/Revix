@@ -1,0 +1,49 @@
+eval_id: correctness-tax-bracket-boundary
+risk_type: correctness
+execution_stage: pre-release
+review_budget: 2
+expected_verdict: COMMENT
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/tax
+    title: "Tighten 2026 bracket boundaries"
+    body: "Switches the upper-bound comparison so the cap is exclusive."
+    author: ivan@example.com
+    labels: []
+    base_ref: main
+    head_ref: release/tax-2026
+  changed_files:
+    - path: src/tax/brackets.js
+      status: modified
+      additions: 1
+      deletions: 1
+  raw_diff: |
+    diff --git a/src/tax/brackets.js b/src/tax/brackets.js
+    --- a/src/tax/brackets.js
+    +++ b/src/tax/brackets.js
+    @@ -8,7 +8,7 @@ export function bracketFor(income) {
+       for (const bracket of BRACKETS) {
+    -    if (income >= bracket.lower && income <= bracket.upper) {
+    +    if (income > bracket.lower && income < bracket.upper) {
+           return bracket;
+         }
+       }
+
+must_find:
+  - id: wrong-bracket-boundary
+    severity: BLOCKER
+    quality_rule: testability.verifiable_behavior
+    evidence_files: [src/tax/brackets.js]
+    summary_hint: "boundary income values now fall outside any bracket producing wrong tax"
+
+should_find:
+  - id: no-regression-test
+    severity: MAJOR
+    quality_rule: testability.verifiable_behavior
+    evidence_files: [src/tax/brackets.js]
+    summary_hint: "no test asserts behaviour at bracket boundaries"
+
+allowed_find: []
+forbidden_find: []

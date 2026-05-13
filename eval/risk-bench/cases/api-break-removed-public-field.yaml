@@ -1,0 +1,47 @@
+eval_id: api-break-removed-public-field
+risk_type: api-break
+execution_stage: pre-release
+review_budget: 3
+expected_verdict: REQUEST_CHANGES
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/api
+    title: "Trim unused legacy fields from /v1/users response"
+    body: "The mobile app no longer reads display_name. Removing to slim payload."
+    author: eve@example.com
+    labels: []
+    base_ref: main
+    head_ref: release/v1-trim
+  changed_files:
+    - path: src/api/users/serialize.js
+      status: modified
+      additions: 0
+      deletions: 1
+  raw_diff: |
+    diff --git a/src/api/users/serialize.js b/src/api/users/serialize.js
+    --- a/src/api/users/serialize.js
+    +++ b/src/api/users/serialize.js
+    @@ -3,7 +3,6 @@ export function serializeUser(user) {
+       return {
+         id: user.id,
+         email: user.email,
+    -    display_name: user.displayName,
+         created_at: user.createdAt
+       };
+     }
+
+must_find:
+  - id: removed-public-field-no-deprecation
+    severity: BLOCKER
+    quality_rule: contract.no_breaking_change_without_versioning
+    evidence_files: [src/api/users/serialize.js]
+    summary_hint: "removed public field display_name from versioned api without deprecation"
+
+should_find: []
+
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "consider renaming"
+    reason: pre-release review focuses on contract risk, not naming

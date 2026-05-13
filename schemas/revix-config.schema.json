@@ -66,6 +66,31 @@
         }
       }
     },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pr": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "labels": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "skip": { "$ref": "#/$defs/strings" },
+                "force_reviewers": {
+                  "type": "object",
+                  "additionalProperties": { "$ref": "#/$defs/reviewerIds" }
+                }
+              }
+            }
+          }
+        },
+        "working_tree": { "$ref": "#/$defs/stageConfig" },
+        "staged": { "$ref": "#/$defs/stageConfig" }
+      }
+    },
     "output": {
       "type": "object",
       "additionalProperties": false,
@@ -82,7 +107,8 @@
         "model": { "type": "string" },
         "temperature": { "type": "number", "minimum": 0, "maximum": 2 },
         "timeout_ms": { "type": "integer", "minimum": 1 },
-        "max_retries": { "type": "integer", "minimum": 0 }
+        "max_retries": { "type": "integer", "minimum": 0 },
+        "max_output_tokens": { "type": "integer", "minimum": 1 }
       }
     },
     "verdict": {
@@ -148,6 +174,14 @@
     },
     "severity": {
       "enum": ["BLOCKER", "MAJOR", "MINOR", "QUESTION", "NIT"]
+    },
+    "stageConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "budget": { "type": "integer", "minimum": 0 },
+        "severity_floor": { "$ref": "#/$defs/severity" }
+      }
     },
     "verdict": {
       "enum": ["APPROVE", "COMMENT", "REQUEST_CHANGES", "BLOCK"]

@@ -1,0 +1,48 @@
+eval_id: observability-removed-structured-log
+risk_type: observability
+execution_stage: pre-commit
+review_budget: 2
+expected_verdict: COMMENT
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/payments
+    title: "Clean up checkout logging"
+    body: "Tidies up the checkout success log line."
+    author: grace@example.com
+    labels: []
+    base_ref: main
+    head_ref: WORKTREE
+  changed_files:
+    - path: src/checkout/finalize.js
+      status: modified
+      additions: 1
+      deletions: 4
+  raw_diff: |
+    diff --git a/src/checkout/finalize.js b/src/checkout/finalize.js
+    --- a/src/checkout/finalize.js
+    +++ b/src/checkout/finalize.js
+    @@ -32,9 +32,6 @@ export async function finalizeCheckout(orderId) {
+       const result = await charge(orderId);
+    -  logger.info({
+    -    event: 'checkout.finalized',
+    -    orderId,
+    -    amount: result.amount,
+    -  });
+    +  logger.info('done');
+       return result;
+     }
+
+must_find:
+  - id: lost-structured-log
+    severity: MINOR
+    quality_rule: observability.no_silent_regressions
+    evidence_files: [src/checkout/finalize.js]
+    summary_hint: "structured checkout finalized log replaced with unstructured done string"
+
+should_find: []
+allowed_find: []
+forbidden_find:
+  - pattern_quality_rule: "style.*"
+    reason: style nits out of scope

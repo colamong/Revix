@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://revix.dev/schemas/risk-bench-case.schema.json",
+  "title": "Revix risk-bench case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eval_id",
+    "risk_type",
+    "execution_stage",
+    "review_budget",
+    "expected_verdict",
+    "changeset"
+  ],
+  "properties": {
+    "eval_id": { "type": "string", "minLength": 1 },
+    "risk_type": {
+      "enum": [
+        "security",
+        "concurrency",
+        "data-loss",
+        "api-break",
+        "perf",
+        "observability",
+        "reliability",
+        "correctness"
+      ]
+    },
+    "execution_stage": {
+      "enum": ["pre-commit", "pre-push", "pre-merge", "pre-release"]
+    },
+    "review_budget": { "type": "integer", "minimum": 0 },
+    "expected_verdict": {
+      "enum": ["APPROVE", "COMMENT", "REQUEST_CHANGES", "BLOCK"]
+    },
+    "changeset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string" },
+        "metadata": { "type": "object" },
+        "changed_files": { "type": "array" },
+        "raw_diff": { "type": "string" }
+      }
+    },
+    "must_find": { "$ref": "#/$defs/expectedList" },
+    "should_find": { "$ref": "#/$defs/expectedList" },
+    "allowed_find": { "$ref": "#/$defs/expectedList" },
+    "forbidden_find": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/forbiddenItem" }
+    }
+  },
+  "$defs": {
+    "expectedList": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/expectedItem" }
+    },
+    "expectedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["BLOCKER", "MAJOR", "MINOR", "QUESTION", "NIT"] },
+        "quality_rule": { "type": "string" },
+        "evidence_files": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "summary_hint": { "type": "string" }
+      }
+    },
+    "forbiddenItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pattern_quality_rule": { "type": "string" },
+        "pattern_summary": { "type": "string" },
+        "reason": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["pattern_quality_rule"] },
+        { "required": ["pattern_summary"] }
+      ]
+    }
+  }
+}

@@ -37,6 +37,22 @@ export const DEFAULT_CONFIG = Object.freeze({
     skip: Object.freeze(["skip-revix"]),
     force_reviewers: Object.freeze({})
   }),
+  sources: Object.freeze({
+    pr: Object.freeze({
+      labels: Object.freeze({
+        skip: Object.freeze(["skip-revix"]),
+        force_reviewers: Object.freeze({})
+      })
+    }),
+    working_tree: Object.freeze({
+      budget: 3,
+      severity_floor: "MAJOR"
+    }),
+    staged: Object.freeze({
+      budget: 3,
+      severity_floor: "MAJOR"
+    })
+  }),
   output: Object.freeze({
     format: "markdown"
   }),
@@ -46,7 +62,8 @@ export const DEFAULT_CONFIG = Object.freeze({
     model: "",
     temperature: 0,
     timeout_ms: 60000,
-    max_retries: 0
+    max_retries: 0,
+    max_output_tokens: 4096
   }),
   verdict: Object.freeze({
     fail_on_request_changes: true
@@ -61,12 +78,14 @@ const TOP_LEVEL_KEYS = Object.freeze([
   "selection",
   "severity",
   "labels",
+  "sources",
   "output",
   "provider",
   "verdict",
   "constitution",
   "reviewer_skills"
 ]);
+const SEVERITY_FLOORS = Object.freeze(["NIT", "QUESTION", "MINOR", "MAJOR", "BLOCKER"]);
 const REVIEWER_ID_PATTERN = /^[a-z][a-z0-9_-]*$/;
 
 export function loadRevixConfig(projectRoot = process.cwd()) {
@@ -129,12 +148,25 @@ function normalizeCompatibility(rawConfig) {
       overrides: rawConfig.constitution
     };
   }
+  const prLabels = rawConfig.sources?.pr?.labels;
+  if (prLabels && !rawConfig.labels) {
+    normalized.labels = prLabels;
+  }
+  if (rawConfig.labels && !prLabels) {
+    normalized.sources = {
+      ...(normalized.sources ?? {}),
+      pr: {
+        ...(normalized.sources?.pr ?? {}),
+        labels: rawConfig.labels
+      }
+    };
+  }
   return normalized;
 }
 
 function mergeSection(base, override, label) {
   assertObject(override, label);
-  if (["quality.overrides", "severity.overrides", "labels.force_reviewers"].includes(label)) {
+  if (["quality.overrides", "severity.overrides", "labels.force_reviewers", "sources.pr.labels.force_reviewers"].includes(label)) {
     return override;
   }
   validateExactKeys(override, Object.keys(base), label);
@@ -169,6 +201,7 @@ function validateConfig(config) {
     assertString(label, "labels.force_reviewers key");
     assertReviewerIds(reviewerIds, `labels.force_reviewers.${label}`);
   }
+  validateSourcesConfig(config.sources);
   if (!["markdown", "json", "github-comment"].includes(config.output.format)) {
     throw new RevixConfigError("output.format must be markdown, json, or github-comment");
   }
@@ -178,9 +211,40 @@ function validateConfig(config) {
   }
 }
 
+function validateSourcesConfig(sources) {
+  assertObject(sources, "sources");
+  assertObject(sources.pr, "sources.pr");
+  assertObject(sources.pr.labels, "sources.pr.labels");
+  assertStringArray(sources.pr.labels.skip, "sources.pr.labels.skip", true);
+  assertObject(sources.pr.labels.force_reviewers, "sources.pr.labels.force_reviewers");
+  for (const stage of ["working_tree", "staged"]) {
+    const stageConfig = sources[stage];
+    assertObject(stageConfig, `sources.${stage}`);
+    if (!Number.isInteger(stageConfig.budget) || stageConfig.budget < 0) {
+      throw new RevixConfigError(`sources.${stage}.budget must be a non-negative integer`);
+    }
+    if (!SEVERITY_FLOORS.includes(stageConfig.severity_floor)) {
+      throw new RevixConfigError(`sources.${stage}.severity_floor must be one of ${SEVERITY_FLOORS.join(", ")}`);
+    }
+  }
+}
+
+export function getSourceConfig(config, sourceType) {
+  if (sourceType === "pr") {
+    return config.sources.pr;
+  }
+  if (sourceType === "working-tree" || sourceType === "working_tree") {
+    return config.sources.working_tree;
+  }
+  if (sourceType === "staged") {
+    return config.sources.staged;
+  }
+  return undefined;
+}
+
 function validateProviderConfig(provider) {
   assertObject(provider, "provider");
-  validateExactKeys(provider, ["name", "fixture_dir", "model", "temperature", "timeout_ms", "max_retries"], "provider");
+  validateExactKeys(provider, ["name", "fixture_dir", "model", "temperature", "timeout_ms", "max_retries", "max_output_tokens"], "provider");
   if (!["mock", "openai", "anthropic"].includes(provider.name)) {
     throw new RevixConfigError("provider.name must be mock, openai, or anthropic");
   }
@@ -198,6 +262,12 @@ function validateProviderConfig(provider) {
   }
   if (!Number.isInteger(provider.max_retries) || provider.max_retries < 0) {
     throw new RevixConfigError("provider.max_retries must be a non-negative integer");
+  }
+  if (!Number.isInteger(provider.max_output_tokens) || provider.max_output_tokens < 1) {
+    throw new RevixConfigError("provider.max_output_tokens must be a positive integer");
+  }
+  if (provider.name !== "mock" && provider.model.trim() === "") {
+    throw new RevixConfigError("provider.model is required when provider.name is openai or anthropic");
   }
 }
 
@@ -226,6 +296,16 @@ function cloneConfig(config) {
     labels: {
       skip: [...config.labels.skip],
       force_reviewers: Object.fromEntries(Object.entries(config.labels.force_reviewers).map(([label, reviewerIds]) => [label, [...reviewerIds]]))
+    },
+    sources: {
+      pr: {
+        labels: {
+          skip: [...config.sources.pr.labels.skip],
+          force_reviewers: Object.fromEntries(Object.entries(config.sources.pr.labels.force_reviewers).map(([label, reviewerIds]) => [label, [...reviewerIds]]))
+        }
+      },
+      working_tree: { ...config.sources.working_tree },
+      staged: { ...config.sources.staged }
     },
     output: { ...config.output },
     provider: { ...config.provider },

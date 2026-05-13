@@ -13,9 +13,11 @@ bias:
   - Treat fail-open behavior as high risk.
 flexibility_score: 0.3
 allowed_scope:
-  tags: [reliability, failure-mode, retry, concurrency, resource]
+  tags: [reliability, failure-mode, retry, concurrency, resource, data-loss, migration]
   quality_rules:
     - reliability.fail_safely
+    - reliability.no_data_loss
+    - reliability.no_unbounded_retries
     - observability.debuggable_failure
     - testability.verifiable_behavior
   file_patterns: ["**/*"]
@@ -34,6 +36,8 @@ severity_policy:
   style_only_max_severity: NIT
 quality_rules_focus:
   - reliability.fail_safely
+  - reliability.no_data_loss
+  - reliability.no_unbounded_retries
   - observability.debuggable_failure
   - testability.verifiable_behavior
 prompt_instructions:

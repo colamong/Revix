@@ -62,7 +62,9 @@ function renderMarkdown({ prInput, renderObject, githubComment }) {
   }
   if (prInput?.metadata) {
     lines.push("");
-    lines.push(`PR: ${prInput.metadata.repo}#${prInput.metadata.number}`);
+    const { repo, number, head_ref } = prInput.metadata;
+    const ref = number != null ? `#${number}` : head_ref ? `@${head_ref}` : "";
+    lines.push(`Changeset: ${repo}${ref}`);
   }
   lines.push("");
   lines.push(`Result: ${renderObject.passed ? "passed" : "attention required"}`);

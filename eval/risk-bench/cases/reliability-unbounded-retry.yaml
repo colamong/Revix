@@ -1,0 +1,51 @@
+eval_id: reliability-unbounded-retry
+risk_type: reliability
+execution_stage: pre-push
+review_budget: 2
+expected_verdict: REQUEST_CHANGES
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/integrations
+    title: "Make webhook delivery resilient"
+    body: "Retries delivery until success."
+    author: hank@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/webhook-retry
+  changed_files:
+    - path: src/webhooks/dispatch.js
+      status: modified
+      additions: 5
+      deletions: 1
+  raw_diff: |
+    diff --git a/src/webhooks/dispatch.js b/src/webhooks/dispatch.js
+    --- a/src/webhooks/dispatch.js
+    +++ b/src/webhooks/dispatch.js
+    @@ -8,6 +8,10 @@ export async function dispatch(webhook) {
+    -  await deliver(webhook);
+    +  let attempt = 0;
+    +  while (true) {
+    +    const ok = await deliver(webhook);
+    +    if (ok) break;
+    +    attempt += 1;
+    +  }
+     }
+
+must_find:
+  - id: unbounded-retry-loop
+    severity: MAJOR
+    quality_rule: reliability.no_unbounded_retries
+    evidence_files: [src/webhooks/dispatch.js]
+    summary_hint: "while true retry loop has no cap and no backoff causing runaway calls"
+
+should_find:
+  - id: missing-backoff
+    severity: MINOR
+    quality_rule: reliability.no_unbounded_retries
+    evidence_files: [src/webhooks/dispatch.js]
+    summary_hint: "no exponential backoff between retry attempts"
+
+allowed_find: []
+forbidden_find: []

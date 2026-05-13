@@ -1,0 +1,45 @@
+eval_id: data-loss-drop-column-migration
+risk_type: data-loss
+execution_stage: pre-merge
+review_budget: 2
+expected_verdict: BLOCK
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/platform
+    title: "Drop unused order.preferred_currency column"
+    body: "Removes the column. It was only read by the deprecated legacy reports service."
+    author: dave@example.com
+    labels: []
+    base_ref: main
+    head_ref: chore/drop-preferred-currency
+  changed_files:
+    - path: migrations/2026_05_drop_preferred_currency.sql
+      status: added
+      additions: 1
+      deletions: 0
+  raw_diff: |
+    diff --git a/migrations/2026_05_drop_preferred_currency.sql b/migrations/2026_05_drop_preferred_currency.sql
+    new file mode 100644
+    --- /dev/null
+    +++ b/migrations/2026_05_drop_preferred_currency.sql
+    @@ -0,0 +1,1 @@
+    +ALTER TABLE orders DROP COLUMN preferred_currency;
+
+must_find:
+  - id: irreversible-drop-without-backup
+    severity: BLOCKER
+    quality_rule: reliability.no_data_loss
+    evidence_files: [migrations/2026_05_drop_preferred_currency.sql]
+    summary_hint: "drop column is irreversible and data is not backed up beforehand"
+
+should_find:
+  - id: no-rolling-deploy-coordination
+    severity: MAJOR
+    quality_rule: reliability.fail_safely
+    evidence_files: [migrations/2026_05_drop_preferred_currency.sql]
+    summary_hint: "column dropped in single step without ensuring no live readers"
+
+allowed_find: []
+forbidden_find: []

@@ -1,7 +1,12 @@
 import type { ReviewEvalCase, ReviewQualityEvaluation } from "./types.d.ts";
 
-export const COMPARATIVE_REVIEWERS: readonly ["revix", "gstack", "greptile", "coderabbit"];
+export const COMPARATIVE_REVIEWERS: readonly ["revix", "codex-basic", "gstack", "greptile", "coderabbit"];
 export const DEFAULT_EVAL_COMMAND: string;
+export const BENCHMARK_POLICY: Readonly<{
+  version: string;
+  max_total_findings: number;
+  max_findings_per_reviewer: number;
+}>;
 
 export class ComparativeEvaluationError extends Error {}
 
@@ -29,6 +34,13 @@ export function invokeModelForJson(input: { prompt: object; modelRunner: (prompt
 export function parseModelJson(raw: string): object;
 export function normalizeModelFindings(input: { parsed: object; reviewer: string; evalCase: ReviewEvalCase }): object[];
 export function normalizeRevixModelFindings(input: { parsed: object; reviewer: object; selection: object; evalCase: ReviewEvalCase }): object[];
+export function applyBenchmarkFindingPolicy(input: {
+  reviewerRun: object;
+  evalCase: ReviewEvalCase;
+  qualityRules: readonly object[];
+  maxTotalFindings?: number;
+  maxFindingsPerReviewer?: number;
+}): object;
 export function createCommandModelRunner(input?: { command?: string; timeoutMs?: number }): (prompt: string) => Promise<string>;
 export function buildComparativeReport(results: object[]): object;
 export function writeComparativeReport(input: { outDir: string; results: object[]; report: object }): Promise<void>;

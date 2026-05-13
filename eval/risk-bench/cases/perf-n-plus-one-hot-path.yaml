@@ -1,0 +1,48 @@
+eval_id: perf-n-plus-one-hot-path
+risk_type: perf
+execution_stage: pre-push
+review_budget: 2
+expected_verdict: REQUEST_CHANGES
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/orders
+    title: "Enrich orders list with customer name"
+    body: "Reads from customers per order to surface name in listing."
+    author: frank@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/orders-list-customer-name
+  changed_files:
+    - path: src/orders/list.js
+      status: modified
+      additions: 5
+      deletions: 1
+  raw_diff: |
+    diff --git a/src/orders/list.js b/src/orders/list.js
+    --- a/src/orders/list.js
+    +++ b/src/orders/list.js
+    @@ -14,7 +14,11 @@ export async function listOrders(userId) {
+       const orders = await db.orders.findAll({ where: { userId } });
+    -  return orders;
+    +  const enriched = [];
+    +  for (const order of orders) {
+    +    const customer = await db.customers.findById(order.customerId);
+    +    enriched.push({ ...order, customerName: customer.name });
+    +  }
+    +  return enriched;
+     }
+
+must_find:
+  - id: n-plus-one-query
+    severity: MAJOR
+    quality_rule: performance.no_n_plus_one
+    evidence_files: [src/orders/list.js]
+    summary_hint: "loop performs one customer lookup per order causing n plus one queries"
+
+should_find: []
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "consider extracting"
+    reason: refactor suggestions are out of scope for pre-push perf review

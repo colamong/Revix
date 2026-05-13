@@ -1,0 +1,27 @@
+name: Revix PR Review
+description: Run Revix on pull requests and post a single summary comment.
+inputs:
+  provider:
+    description: Provider name: mock, openai, or anthropic.
+    required: false
+  model:
+    description: Model name for openai or anthropic providers.
+    required: false
+  config-path:
+    description: Project root containing .revix.yml.
+    required: false
+    default: .
+  dry-run:
+    description: Run review without posting comments or failing the workflow.
+    required: false
+    default: "false"
+  fail-on-request-changes:
+    description: Fail when Revix requests changes.
+    required: false
+  comment:
+    description: Post or update the Revix PR comment.
+    required: false
+    default: "true"
+runs:
+  using: node20
+  main: src/github-action/index.js

@@ -1,0 +1,52 @@
+eval_id: security-sql-concat-injection
+risk_type: security
+execution_stage: pre-merge
+review_budget: 3
+expected_verdict: BLOCK
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/orders
+    title: "Filter orders by status from query string"
+    body: "Adds status filter to the orders list endpoint."
+    author: bob@example.com
+    labels: []
+    base_ref: main
+    head_ref: feature/orders-status-filter
+  changed_files:
+    - path: src/orders/list.js
+      status: modified
+      additions: 3
+      deletions: 1
+  raw_diff: |
+    diff --git a/src/orders/list.js b/src/orders/list.js
+    --- a/src/orders/list.js
+    +++ b/src/orders/list.js
+    @@ -8,7 +8,9 @@ export async function listOrders(req, res) {
+       const status = req.query.status;
+    -  const rows = await db.query('SELECT id, total FROM orders WHERE user_id = $1', [req.user.id]);
+    +  const rows = await db.query(
+    +    `SELECT id, total FROM orders WHERE user_id = ${req.user.id} AND status = '${status}'`
+    +  );
+       res.json(rows);
+     }
+
+must_find:
+  - id: sql-injection-concat
+    severity: BLOCKER
+    quality_rule: security.no_new_risk
+    evidence_files: [src/orders/list.js]
+    summary_hint: "query string interpolated directly into sql causes injection"
+
+should_find:
+  - id: trust-boundary-user-id
+    severity: MAJOR
+    quality_rule: security.no_new_risk
+    evidence_files: [src/orders/list.js]
+    summary_hint: "user id interpolated unparameterised even when numeric"
+
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "missing JSDoc"
+    reason: docs not in scope for security review

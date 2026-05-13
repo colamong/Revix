@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadDefaultConstitution, parseYamlSubset } from "../constitution/index.js";
 
@@ -63,11 +63,21 @@ export function loadBuiltInReviewerSkills(qualityRules = loadDefaultConstitution
 }
 
 export function loadProjectReviewerSkills(projectRoot, qualityRules = loadDefaultConstitution()) {
-  const projectDir = join(projectRoot, ".revix", "reviewer-skills");
-  if (!existsSync(projectDir)) {
-    return Object.freeze([]);
+  const seen = new Set();
+  const skills = [];
+  for (const directory of reviewerSkillDirectories(projectRoot)) {
+    if (!existsSync(directory)) {
+      throw new ReviewerSkillValidationError(`reviewer skill path does not exist: ${directory}`);
+    }
+    for (const skill of readReviewerSkillFiles(directory, qualityRules)) {
+      if (seen.has(skill.reviewer_id)) {
+        throw new ReviewerSkillValidationError(`duplicate project reviewer_id: ${skill.reviewer_id}`);
+      }
+      seen.add(skill.reviewer_id);
+      skills.push(skill);
+    }
   }
-  return readReviewerSkillFiles(projectDir, qualityRules);
+  return Object.freeze(skills.sort((left, right) => left.reviewer_id.localeCompare(right.reviewer_id)));
 }
 
 export function loadEffectiveReviewerSkills(projectRoot = process.cwd(), qualityRules = loadDefaultConstitution()) {
@@ -158,6 +168,23 @@ function readReviewerSkillFiles(directory, qualityRules) {
     skills.push(skill);
   }
   return Object.freeze(skills);
+}
+
+function reviewerSkillDirectories(projectRoot) {
+  const dirs = [];
+  const projectDir = join(projectRoot, ".revix", "reviewer-skills");
+  if (existsSync(projectDir)) dirs.push(projectDir);
+  const configPath = join(projectRoot, ".revix.yml");
+  if (!existsSync(configPath)) return dirs;
+  const parsed = parseYamlSubset(readFileSync(configPath, "utf8"));
+  const configuredPaths = parsed.skills?.paths ?? [];
+  if (!Array.isArray(configuredPaths)) return dirs;
+  for (const configuredPath of configuredPaths) {
+    if (typeof configuredPath === "string" && configuredPath.trim() !== "") {
+      dirs.push(resolve(projectRoot, configuredPath));
+    }
+  }
+  return Object.freeze([...new Set(dirs)]);
 }
 
 function loadReviewerSkillSelection(projectRoot) {

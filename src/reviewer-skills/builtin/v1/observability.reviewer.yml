@@ -13,9 +13,10 @@ bias:
   - Avoid logging sensitive data.
 flexibility_score: 0.5
 allowed_scope:
-  tags: [observability, logging, error, metric, tracing, privacy]
+  tags: [observability, logging, error, metric, tracing, privacy, regression]
   quality_rules:
     - observability.debuggable_failure
+    - observability.no_silent_regressions
     - privacy.no_sensitive_data_exposure
     - reliability.fail_safely
   file_patterns: ["**/*"]
@@ -34,6 +35,7 @@ severity_policy:
   style_only_max_severity: NIT
 quality_rules_focus:
   - observability.debuggable_failure
+  - observability.no_silent_regressions
   - privacy.no_sensitive_data_exposure
   - reliability.fail_safely
 prompt_instructions:

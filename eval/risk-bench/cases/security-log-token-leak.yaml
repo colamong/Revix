@@ -1,0 +1,43 @@
+eval_id: security-log-token-leak
+risk_type: security
+execution_stage: pre-commit
+review_budget: 2
+expected_verdict: BLOCK
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/auth
+    title: "Add session debug logging"
+    body: "Helps debug session creation flow in staging."
+    author: alice@example.com
+    labels: []
+    base_ref: main
+    head_ref: WORKTREE
+  changed_files:
+    - path: src/auth/session.js
+      status: modified
+      additions: 2
+      deletions: 0
+  raw_diff: |
+    diff --git a/src/auth/session.js b/src/auth/session.js
+    --- a/src/auth/session.js
+    +++ b/src/auth/session.js
+    @@ -10,6 +10,8 @@ export function createSession(user) {
+       const session = mintSession(user);
+    +  logger.info({ message: 'session created', token: session.token, userId: user.id });
+       return session;
+     }
+
+must_find:
+  - id: log-token-leak
+    severity: MAJOR
+    quality_rule: security.no_new_risk
+    evidence_files: [src/auth/session.js]
+    summary_hint: "session token written to logs leaks credentials"
+
+should_find: []
+allowed_find: []
+forbidden_find:
+  - pattern_quality_rule: "style.*"
+    reason: style nits not in scope for pre-commit risk review

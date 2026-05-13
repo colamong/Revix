@@ -121,3 +121,47 @@ rules:
       onViolation: COMMENT
       blocksMerge: false
     enabled: true
+  - id: reliability.no_data_loss
+    kind: hard
+    category: reliability
+    tags: [reliability, data-loss, migration]
+    description: Changes must not destroy or render unreachable existing data without an explicit backup, deprecation window, or migration plan.
+    severityBehavior:
+      defaultSeverity: BLOCKER
+      maxSeverity: BLOCKER
+      onViolation: BLOCK
+      blocksMerge: true
+    enabled: true
+  - id: reliability.no_unbounded_retries
+    kind: hard
+    category: reliability
+    tags: [reliability, retry, failure-mode]
+    description: Retry and reconnect loops must have an explicit cap and backoff. Unbounded loops are a reliability hazard.
+    severityBehavior:
+      defaultSeverity: MAJOR
+      maxSeverity: MAJOR
+      onViolation: REQUEST_CHANGES
+      blocksMerge: true
+    enabled: true
+  - id: performance.no_n_plus_one
+    kind: soft
+    category: performance
+    tags: [performance, n-plus-one, hot-path]
+    description: Hot paths should avoid N-plus-one query patterns where a single batched lookup is feasible.
+    severityBehavior:
+      defaultSeverity: MAJOR
+      maxSeverity: MAJOR
+      onViolation: REQUEST_CHANGES
+      blocksMerge: true
+    enabled: true
+  - id: observability.no_silent_regressions
+    kind: soft
+    category: observability
+    tags: [observability, regression]
+    description: Operational signals (structured logs, metrics, traces) must not silently regress in scope or fidelity.
+    severityBehavior:
+      defaultSeverity: MINOR
+      maxSeverity: MAJOR
+      onViolation: COMMENT
+      blocksMerge: false
+    enabled: true

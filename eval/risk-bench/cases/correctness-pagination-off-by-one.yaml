@@ -1,0 +1,45 @@
+eval_id: correctness-pagination-off-by-one
+risk_type: correctness
+execution_stage: pre-commit
+review_budget: 2
+expected_verdict: COMMENT
+
+changeset:
+  source: synthetic
+  metadata:
+    repo: example/search
+    title: "Paginate search results"
+    body: "Adds page-based pagination to the search results endpoint."
+    author: iris@example.com
+    labels: []
+    base_ref: main
+    head_ref: WORKTREE
+  changed_files:
+    - path: src/search/paginate.js
+      status: modified
+      additions: 3
+      deletions: 1
+  raw_diff: |
+    diff --git a/src/search/paginate.js b/src/search/paginate.js
+    --- a/src/search/paginate.js
+    +++ b/src/search/paginate.js
+    @@ -1,5 +1,7 @@
+     export function paginate(items, page, pageSize) {
+    -  return items.slice(page * pageSize, (page + 1) * pageSize);
+    +  const start = page * pageSize;
+    +  const end = start + pageSize + 1;
+    +  return items.slice(start, end);
+     }
+
+must_find:
+  - id: off-by-one-page-end
+    severity: MAJOR
+    quality_rule: testability.verifiable_behavior
+    evidence_files: [src/search/paginate.js]
+    summary_hint: "end index adds plus one returning one extra item per page"
+
+should_find: []
+allowed_find: []
+forbidden_find:
+  - pattern_summary: "consider naming"
+    reason: naming nits out of scope

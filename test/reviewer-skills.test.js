@@ -95,6 +95,18 @@ test("allows custom project skills with unique reviewer IDs", () => {
   assert.ok(skills.some((skill) => skill.reviewer_id === "ai-prompts"));
 });
 
+test("loads reviewer skills from configured skills.paths", () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), "revix-reviewer-skill-paths-"));
+  const skillDir = join(projectRoot, "skill-pack");
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(join(projectRoot, ".revix.yml"), `skills:\n  paths: [skill-pack]\n`, "utf8");
+  writeFileSync(join(skillDir, "ai-prompts.reviewer.yml"), customSkillYaml(), "utf8");
+
+  const skills = loadEffectiveReviewerSkills(projectRoot, qualityRules);
+
+  assert.ok(skills.some((skill) => skill.reviewer_id === "ai-prompts"));
+});
+
 test("rejects duplicate custom reviewer IDs", () => {
   const projectRoot = mkdtempSync(join(tmpdir(), "revix-reviewer-skills-"));
   const skillDir = join(projectRoot, ".revix", "reviewer-skills");

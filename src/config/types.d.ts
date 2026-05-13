@@ -19,6 +19,7 @@ export interface RevixConfig {
     temperature: number;
     timeout_ms: number;
     max_retries: number;
+    max_output_tokens: number;
   };
   verdict: { fail_on_request_changes: boolean };
 }

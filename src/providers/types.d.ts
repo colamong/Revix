@@ -24,6 +24,8 @@ export class ProviderError extends Error {
 
 export function createProvider(config?: object, options?: { projectRoot?: string; fixtureDir?: string }): ReviewProvider;
 export function createMockProvider(options?: { fixtureDir?: string; projectRoot?: string }): ReviewProvider;
+export function createOpenAiProvider(config: object, options?: { fetchImpl?: typeof fetch; apiKey?: string }): ReviewProvider;
+export function createAnthropicProvider(config: object, options?: { fetchImpl?: typeof fetch; apiKey?: string }): ReviewProvider;
 export function createProviderReviewerRunner(input: {
   provider: ReviewProvider;
   prInput: PrInput;

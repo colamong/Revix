@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../bin/revix.js";
@@ -130,6 +131,21 @@ test("CLI review accepts separate diff and metadata inputs", async () => {
   assert.match(result.stdout, /Revix PR Review: APPROVE/);
 });
 
+test("CLI review with no source flag defaults to working-tree", async () => {
+  const repo = makeGitRepoWithEdit();
+  const result = await runCliForTest([
+    "review",
+    "--source-cwd",
+    repo,
+    "--project-root",
+    repo,
+    "--dry-run"
+  ]);
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.stdout, /Revix PR Review/);
+});
+
 test("CLI exits non-zero for invalid input", async () => {
   const projectRoot = mkdtempSync(join(tmpdir(), "revix-cli-invalid-"));
   const inputPath = join(projectRoot, "invalid.json");
@@ -143,6 +159,28 @@ test("CLI exits non-zero for invalid input", async () => {
 
   assert.equal(result.exitCode, 1);
   assert.match(result.stderr, /metadata/);
+});
+
+test("CLI init creates default config without overwriting", async () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), "revix-cli-init-"));
+  const first = await runCliForTest(["init", "--project-root", projectRoot]);
+  const second = await runCliForTest(["init", "--project-root", projectRoot]);
+
+  assert.equal(first.exitCode, 0);
+  assert.equal(existsSync(join(projectRoot, ".revix.yml")), true);
+  assert.equal(second.exitCode, 1);
+  assert.match(second.stderr, /already exists/);
+});
+
+test("CLI skill init scaffolds a valid reviewer skill", async () => {
+  const projectRoot = mkdtempSync(join(tmpdir(), "revix-cli-skill-init-"));
+  const created = await runCliForTest(["skill", "init", "ai-prompts", "--project-root", projectRoot]);
+  const checked = await runCliForTest(["check", "--project-root", projectRoot]);
+
+  assert.equal(created.exitCode, 0);
+  assert.equal(existsSync(join(projectRoot, ".revix", "reviewer-skills", "ai-prompts.reviewer.yml")), true);
+  assert.equal(checked.exitCode, 0);
+  assert.match(checked.stdout, /Reviewer skills: 11/);
 });
 
 async function runCliForTest(argv) {
@@ -190,6 +228,19 @@ function prInput() {
     ],
     raw_diff: "diff --git a/src/auth/session.js b/src/auth/session.js\n--- a/src/auth/session.js\n+++ b/src/auth/session.js\n@@ -1,2 +1,3 @@\n const a = 1;\n+logger.info({ token: session.token });\n const b = 2;\n"
   };
+}
+
+function makeGitRepoWithEdit() {
+  const dir = mkdtempSync(join(tmpdir(), "revix-cli-worktree-"));
+  execFileSync("git", ["init", "--quiet", "--initial-branch=main"], { cwd: dir });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: dir });
+  execFileSync("git", ["config", "user.name", "Revix Test"], { cwd: dir });
+  execFileSync("git", ["config", "commit.gpgsign", "false"], { cwd: dir });
+  writeFileSync(join(dir, "app.js"), "console.log('hello')\n", "utf8");
+  execFileSync("git", ["add", "app.js"], { cwd: dir });
+  execFileSync("git", ["commit", "-m", "initial", "--quiet"], { cwd: dir });
+  writeFileSync(join(dir, "app.js"), "console.log('hello')\nconsole.log('changed')\n", "utf8");
+  return dir;
 }
 
 function finding(id) {

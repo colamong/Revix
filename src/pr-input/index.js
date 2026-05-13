@@ -105,8 +105,9 @@ function normalizeMetadata(value) {
   for (const key of ["repo", "title", "author", "base_ref", "head_ref"]) {
     assertString(value[key], `metadata.${key}`);
   }
-  if (!Number.isInteger(value.number) || value.number < 1) {
-    throw new PrInputValidationError("metadata.number must be a positive integer");
+  const hasNumber = value.number !== undefined && value.number !== null;
+  if (hasNumber && (!Number.isInteger(value.number) || value.number < 1)) {
+    throw new PrInputValidationError("metadata.number must be a positive integer when present");
   }
   const body = typeof value.body === "string" ? value.body : "";
   if (!Array.isArray(value.labels) || value.labels.some((label) => typeof label !== "string" || label.trim() === "")) {
@@ -114,7 +115,7 @@ function normalizeMetadata(value) {
   }
   return {
     repo: value.repo.trim(),
-    number: value.number,
+    number: hasNumber ? value.number : null,
     title: value.title.trim(),
     body,
     author: value.author.trim(),
