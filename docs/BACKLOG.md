@@ -66,6 +66,53 @@ file:line where the issue lives and notes the suggested fix.
   change, and additional APPROVE calibration shapes (dependency bump,
   no-op move).
 
+## Resolved in v0.1.2 (post-dogfood pagination fix)
+
+### B-007 — GitHub PR source does not paginate `/files` (RESOLVED)
+
+- v0.1.1 dogfood surfaced that [src/sources/pr-github.js](../src/sources/pr-github.js)
+  called the GitHub pulls files endpoint a single time with `?per_page=100`,
+  so any PR with more than 100 changed files would silently truncate. The
+  `changed_files` list, reviewer selection, evidence validation, and final
+  verdict could all be derived from a partial diff — exactly the false-safe
+  failure mode the constitution's `reliability.fail_safely` rule is meant
+  to prevent. Reported as `architecture-pr-files-pagination-001` and
+  `reliability-pr-files-pagination-001` (both MAJOR/HIGH).
+- Fix: `collectPrGithubChangeset` now loops the endpoint with `&page=N` and
+  stops when the page returns fewer than `per_page` rows or an empty array.
+  A 50-page (5000-file) sanity ceiling causes the run to fail closed with a
+  clear error rather than under-review an unbounded PR.
+- Tests: two new cases in [test/github-action.test.js](../test/github-action.test.js)
+  cover the >100-files path (105 across two pages) and the exact-multiple
+  edge case (full page then empty). Suite 188/188 (186 baseline + 2).
+  Risk-bench unchanged at 20 cases, median RRS 100, hard_gated 0,
+  must_recall 1.0.
+
+## Resolved in v0.1.1 (framework)
+
+### B-008 — Off-scope findings tore down the whole reviewer output (RESOLVED)
+
+- v0.1.1 dogfood surfaced that any single off-scope tag or `quality_rule`
+  in a finding caused the framework to silently drop the entire reviewer's
+  output. The security reviewer emitted 11 findings; only 6 reached the
+  user, with no observable signal.
+- Fixed by splitting `FindingValidationError` into a soft-drop subclass
+  `FindingOutOfScopeError` for off-scope tags / quality_rules while keeping
+  hard throws for reviewer_id mismatches and other shape violations.
+  `validateFindings` now returns `{ findings, dropped }`; the
+  reviewer-runner aggregates dropped per reviewer; the CLI emits a one-line
+  stderr warning summarising what was filtered (mirrors the
+  untracked-skipped pattern).
+- Also widened three reviewer scopes the dogfood flagged as legitimately
+  reaching beyond their published taxonomy: architecture +=
+  `reliability`, contract += `cli`, security += `data-exposure`. See
+  [src/findings/index.js](../src/findings/index.js),
+  [src/reviewer-runner/index.js](../src/reviewer-runner/index.js),
+  [bin/revix.js](../bin/revix.js), and the three reviewer YAMLs under
+  `src/reviewer-skills/builtin/v1/`.
+- Tests: 186/186 (182 baseline + 4 new soft-drop tests). Risk-bench
+  unchanged at 20 cases, median RRS 100, hard_gated 0, must_recall 1.0.
+
 ## Tracking note
 
 Finding B-003 (the "verdict comes from a stub, not the real decision

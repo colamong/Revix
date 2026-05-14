@@ -24,6 +24,66 @@ test("collectPrInput builds Revix PR input from GitHub API data", async () => {
   assert.equal(input.raw_diff.startsWith("diff --git"), true);
 });
 
+test("collectPrInput paginates PR files endpoint beyond 100 entries", async () => {
+  const filesPage1 = Array.from({ length: 100 }, (_, i) => ({
+    filename: `src/page1-${i}.js`,
+    status: "modified",
+    additions: 1,
+    deletions: 0,
+    patch: "@@ -1 +1 @@"
+  }));
+  const filesPage2 = Array.from({ length: 5 }, (_, i) => ({
+    filename: `src/page2-${i}.js`,
+    status: "modified",
+    additions: 1,
+    deletions: 0,
+    patch: "@@ -1 +1 @@"
+  }));
+  const calls = [];
+  const api = {
+    getJson: async (path) => {
+      calls.push(path);
+      if (/[?&]page=1(?:$|&)/.test(path)) return filesPage1;
+      if (/[?&]page=2(?:$|&)/.test(path)) return filesPage2;
+      throw new Error(`unexpected getJson path: ${path}`);
+    },
+    getText: async () => "diff --git a/src/page1-0.js b/src/page1-0.js\n"
+  };
+
+  const input = await collectPrInput({ api, event: eventPayload(), pr: eventPayload().pull_request });
+
+  assert.equal(input.changed_files.length, 105, "expected all 105 files across both pages");
+  const paths = input.changed_files.map((file) => file.path);
+  assert.ok(paths.includes("src/page2-0.js"), "files from page 2 must be included");
+  assert.ok(paths.includes("src/page2-4.js"), "last entry from page 2 must be included");
+  assert.equal(calls.length, 2, "should fetch exactly two pages when page 2 returns less than per_page");
+});
+
+test("collectPrInput stops paginating when a full page is followed by an empty page", async () => {
+  const fullPage = Array.from({ length: 100 }, (_, i) => ({
+    filename: `src/file-${i}.js`,
+    status: "modified",
+    additions: 1,
+    deletions: 0,
+    patch: "@@ -1 +1 @@"
+  }));
+  const calls = [];
+  const api = {
+    getJson: async (path) => {
+      calls.push(path);
+      if (/[?&]page=1(?:$|&)/.test(path)) return fullPage;
+      if (/[?&]page=2(?:$|&)/.test(path)) return [];
+      throw new Error(`unexpected getJson path: ${path}`);
+    },
+    getText: async () => "diff --git a/src/file-0.js b/src/file-0.js\n"
+  };
+
+  const input = await collectPrInput({ api, event: eventPayload(), pr: eventPayload().pull_request });
+
+  assert.equal(input.changed_files.length, 100);
+  assert.equal(calls.length, 2, "should request page 2 then stop when empty");
+});
+
 test("upsertReviewComment updates existing marker comment", async () => {
   const calls = [];
   const api = {

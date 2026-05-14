@@ -1,3 +1,6 @@
+const FILES_PER_PAGE = 100;
+const FILES_PAGE_LIMIT = 50;
+
 export async function collectPrGithubChangeset(source, options = {}) {
   const api = source.api ?? options.api;
   const event = source.event ?? options.event;
@@ -5,7 +8,7 @@ export async function collectPrGithubChangeset(source, options = {}) {
   if (!api || !event || !pr) {
     throw new Error("pr-github source requires { api, event, pr }");
   }
-  const files = await api.getJson(`/repos/${event.repository.full_name}/pulls/${pr.number}/files?per_page=100`);
+  const files = await fetchAllPrFiles(api, event.repository.full_name, pr.number);
   const diff = await api.getText(`/repos/${event.repository.full_name}/pulls/${pr.number}`, {
     accept: "application/vnd.github.v3.diff"
   });
@@ -30,6 +33,25 @@ export async function collectPrGithubChangeset(source, options = {}) {
     }))),
     raw_diff: diff
   });
+}
+
+async function fetchAllPrFiles(api, repo, prNumber) {
+  const collected = [];
+  for (let page = 1; page <= FILES_PAGE_LIMIT; page += 1) {
+    const batch = await api.getJson(
+      `/repos/${repo}/pulls/${prNumber}/files?per_page=${FILES_PER_PAGE}&page=${page}`
+    );
+    if (!Array.isArray(batch) || batch.length === 0) {
+      return collected;
+    }
+    collected.push(...batch);
+    if (batch.length < FILES_PER_PAGE) {
+      return collected;
+    }
+  }
+  throw new Error(
+    `pr-github source: aborted after ${FILES_PAGE_LIMIT} pages (>${FILES_PAGE_LIMIT * FILES_PER_PAGE} files) for ${repo} PR #${prNumber}; PR exceeds reviewable size`
+  );
 }
 
 function normalizeStatus(status) {
