@@ -4,3 +4,6 @@ coverage/
 
 # External benchmark data can be re-downloaded and may contain large diffs.
 eval-data/
+
+# Local dogfood run outputs (regeneratable)
+dogfood-*
